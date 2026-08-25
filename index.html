@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Carte santé PACA : ZIP, zones blanches 4G et CPTS</title>
 <meta name="description" content="Carte interactive de la région Provence-Alpes-Côte d'Azur : zonage conventionnel médecins généralistes (ZIP), zones blanches mobiles 4G et CPTS.">
-<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="leaflet.css">
 <style>
 :root{
   color-scheme: light;
@@ -177,7 +177,7 @@ footer b{color:var(--ink-2);font-weight:600}
 <div id="hoverbar"></div>
 <div id="loader">Chargement des données</div>
 
-<script src="vendor/leaflet.js"></script>
+<script src="leaflet.js"></script>
 <script>if(typeof L==="undefined"){document.write('<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>')}</script>
 <script>
 (function(){
@@ -380,7 +380,7 @@ function loadJSON(url){
   });
 }
 
-loadJSON("data/communes-paca.geojson").then(function(gj){
+loadJSON("communes-paca.geojson").then(function(gj){
   var dl = document.getElementById("communes"), frag = document.createDocumentFragment();
   L.geoJSON(gj, {
     renderer: L.canvas({padding:0.4}),
@@ -409,7 +409,7 @@ loadJSON("data/communes-paca.geojson").then(function(gj){
   chargerArrondissements()
     .catch(function(){ /* couche de repère facultative */ })
     .then(chargerCPTS);   // après les communes : le rattachement a besoin de byCode
-  return loadJSON("data/zones-blanches-4g.geojson");
+  return loadJSON("zones-blanches-4g.geojson");
 })
 .then(function(gj){
   L.geoJSON(gj, {
@@ -450,7 +450,7 @@ var arrLayers = [], cptsParArr = {};
 // Couche de repère : les 16 arrondissements municipaux de Marseille, en trait
 // fin sous les CPTS. Elle rend visible le 1er arrondissement, seul à n'être
 // couvert par aucune CPTS du listing.
-function chargerArrondissements(){ return loadJSON("data/arrondissements-marseille.geojson").then(function(gj){
+function chargerArrondissements(){ return loadJSON("arrondissements-marseille.geojson").then(function(gj){
   L.geoJSON(gj, {
     renderer: svgRenderer,
     style: function(){ return {color:css("--cpts"), weight:.9, opacity:.55,
@@ -469,7 +469,7 @@ function chargerArrondissements(){ return loadJSON("data/arrondissements-marseil
   });
 }); }
 
-function chargerCPTS(){ return loadJSON("data/cpts.geojson").then(function(gj){
+function chargerCPTS(){ return loadJSON("cpts.geojson").then(function(gj){
   L.geoJSON(gj, {
     renderer: svgRenderer,
     style: styleCPTS,
