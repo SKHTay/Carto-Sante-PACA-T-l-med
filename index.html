@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Carte santé PACA : ZIP, zones blanches 4G et CPTS</title>
+<meta name="description" content="Carte interactive de la région Provence-Alpes-Côte d'Azur : zonage conventionnel médecins généralistes (ZIP), zones blanches mobiles 4G et CPTS.">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<style>
+:root{
+  color-scheme: light;
+  --surface-1:#fcfcfb; --plane:#f2f2ef; --panel:#ffffff;
+  --ink-1:#0b0b0b; --ink-2:#52514e; --ink-3:#898781;
+  --line:#e1e0d9; --ring:rgba(11,11,11,.10);
+  --zip:#eb6834; --zb:#4a3aa7; --cpts:#2a78d6; --both:#7a1020; --neutral:#b9bfca;
+  --accent:#2a78d6;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --surface-1:#1a1a19; --plane:#0d0d0d; --panel:#1a1a19;
+    --ink-1:#ffffff; --ink-2:#c3c2b7; --ink-3:#898781;
+    --line:#2c2c2a; --ring:rgba(255,255,255,.12);
+    --accent:#3987e5;
+  }
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;
+  color:var(--ink-1); background:var(--plane);
+  display:flex; overflow:hidden;
+}
+/* ---------- panneau ---------- */
+#panel{
+  width:330px; flex:0 0 330px; height:100%; overflow-y:auto;
+  background:var(--panel); border-right:1px solid var(--line);
+  padding:18px 18px 28px; z-index:1000;
+}
+#panel h1{font-size:16px;line-height:1.3;margin:0 0 2px;letter-spacing:-.01em}
+#panel .sub{font-size:12px;color:var(--ink-3);margin:0 0 18px}
+.sec{border-top:1px solid var(--line);padding-top:14px;margin-top:16px}
+.sec:first-of-type{border-top:0;margin-top:0;padding-top:0}
+.sec h2{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);margin:0 0 10px;font-weight:600}
+/* compteurs */
+#stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat{background:var(--surface-1);border:1px solid var(--ring);border-radius:8px;padding:9px 10px}
+.stat .v{font-size:21px;font-weight:650;letter-spacing:-.02em;line-height:1.1}
+.stat .k{font-size:10.5px;color:var(--ink-2);margin-top:2px;line-height:1.25}
+.stat.zip .v{color:var(--zip)} .stat.zb .v{color:var(--zb)} .stat.both .v{color:var(--both)}
+/* contrôles */
+label.row{display:flex;align-items:center;gap:9px;padding:5px 0;cursor:pointer;font-size:13px}
+label.row input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex:0 0 auto;margin:0}
+label.row.off{opacity:.45;cursor:not-allowed}
+label.row .cnt{margin-left:auto;font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.swatch{width:13px;height:13px;border-radius:3px;flex:0 0 auto;border:1px solid var(--ring)}
+.linkrow{display:flex;gap:12px;margin-top:6px}
+.linkrow button{background:none;border:0;padding:0;font:inherit;font-size:11.5px;color:var(--accent);cursor:pointer;text-decoration:underline}
+input[type=search],select{
+  width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;
+  background:var(--surface-1);color:var(--ink-1);font:inherit;font-size:13px
+}
+.btn{
+  display:block;width:100%;padding:9px 12px;margin-top:8px;border-radius:7px;
+  border:1px solid var(--line);background:var(--surface-1);color:var(--ink-1);
+  font:inherit;font-size:12.5px;font-weight:550;cursor:pointer;text-align:left
+}
+.btn:hover{border-color:var(--ink-3)}
+.btn[aria-pressed=true]{background:var(--both);border-color:var(--both);color:#fff}
+.btn.ghost{font-weight:400;color:var(--ink-2)}
+.note{font-size:11.5px;color:var(--ink-3);line-height:1.5;margin:8px 0 0}
+.note code{font-size:11px;background:var(--plane);padding:1px 4px;border-radius:3px}
+.warn{border-left:2px solid var(--zip);padding-left:9px}
+footer{font-size:11px;color:var(--ink-3);line-height:1.6;margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
+footer b{color:var(--ink-2);font-weight:600}
+/* ---------- carte ---------- */
+#map{flex:1;height:100%;background:var(--plane)}
+#hoverbar{
+  position:absolute;left:50%;transform:translateX(-50%);bottom:18px;z-index:800;
+  background:var(--panel);border:1px solid var(--ring);border-radius:8px;
+  padding:7px 14px;font-size:12.5px;box-shadow:0 2px 12px rgba(0,0,0,.13);
+  pointer-events:none;opacity:0;transition:opacity .12s;white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis
+}
+#hoverbar.on{opacity:1}
+#hoverbar b{font-weight:650}
+#hoverbar .tag{font-size:11px;padding:1px 6px;border-radius:20px;margin-left:7px;color:#fff}
+.leaflet-popup-content{margin:12px 14px;font:13px/1.5 system-ui,-apple-system,sans-serif;min-width:200px}
+.leaflet-popup-content h3{margin:0 0 2px;font-size:14.5px}
+.leaflet-popup-content .code{font-size:11px;color:var(--ink-3);margin-bottom:9px}
+.leaflet-popup-content dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:12.5px}
+.leaflet-popup-content dt{color:var(--ink-3)}
+.leaflet-popup-content dd{margin:0;font-weight:550}
+.pill{display:inline-block;padding:1px 7px;border-radius:20px;font-size:11px;color:#fff;font-weight:600}
+#loader{position:absolute;inset:0;display:grid;place-items:center;background:var(--plane);z-index:900;font-size:13px;color:var(--ink-2)}
+#loader.done{display:none}
+#burger{display:none}
+@media (max-width:900px){
+  body{flex-direction:column}
+  #panel{width:100%;flex:0 0 auto;max-height:52vh;border-right:0;border-bottom:1px solid var(--line)}
+  #panel.collapsed{max-height:56px;overflow:hidden}
+  #burger{display:block;position:absolute;top:12px;right:14px;z-index:1001;background:var(--surface-1);
+    border:1px solid var(--line);border-radius:7px;padding:6px 11px;font:inherit;font-size:12px;cursor:pointer;color:var(--ink-1)}
+}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <pattern id="hatchZB" width="7" height="7" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+    <rect width="7" height="7" fill="var(--zb)" fill-opacity=".28"/>
+    <line x1="0" y1="0" x2="0" y2="7" stroke="var(--zb)" stroke-width="2.6" stroke-opacity=".95"/>
+  </pattern>
+</defs></svg>
+
+<div id="panel">
+  <button id="burger" aria-expanded="true">Filtres</button>
+  <h1>Accès aux soins et couverture mobile en PACA</h1>
+  <p class="sub">Zonage conventionnel MG, zones blanches 4G, CPTS</p>
+
+  <div class="sec">
+    <h2>Sélection courante</h2>
+    <div id="stats">
+      <div class="stat"><div class="v" id="s-tot">-</div><div class="k">communes affichées</div></div>
+      <div class="stat zip"><div class="v" id="s-zip">-</div><div class="k">en ZIP</div></div>
+      <div class="stat zb"><div class="v" id="s-zb">-</div><div class="k">touchées zone blanche</div></div>
+      <div class="stat both"><div class="v" id="s-both">-</div><div class="k">ZIP <i>et</i> zone blanche</div></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>Départements</h2>
+    <div id="depts"></div>
+    <div class="linkrow"><button type="button" data-all="1">Tout</button><button type="button" data-all="0">Aucun</button></div>
+  </div>
+
+  <div class="sec">
+    <h2>Couches</h2>
+    <label class="row"><input type="checkbox" id="l-zip" checked><span class="swatch" style="background:var(--zip)"></span>Communes ZIP<span class="cnt" id="c-zip"></span></label>
+    <label class="row"><input type="checkbox" id="l-non"><span class="swatch" style="background:var(--neutral)"></span>Communes hors ZIP<span class="cnt" id="c-non"></span></label>
+    <label class="row" id="w-zb"><input type="checkbox" id="l-zb" checked><span class="swatch" style="background:var(--zb)"></span>Zones blanches 4G<span class="cnt" id="c-zb"></span></label>
+    <label class="row" id="w-cpts"><input type="checkbox" id="l-cpts"><span class="swatch" style="background:var(--cpts)"></span>CPTS<span class="cnt" id="c-cpts"></span></label>
+    <p class="note" id="cpts-note"></p>
+  </div>
+
+  <div class="sec">
+    <h2>Croisement</h2>
+    <button class="btn" id="cross" aria-pressed="false">Isoler les communes ZIP en zone blanche</button>
+    <p class="note">Sous-densité médicale <i>et</i> défaut de couverture 4G : le cumul des deux fragilités.</p>
+  </div>
+
+  <div class="sec">
+    <h2>Rechercher</h2>
+    <input type="search" id="q" list="communes" placeholder="Commune ou code INSEE" autocomplete="off">
+    <datalist id="communes"></datalist>
+    <button class="btn ghost" id="csv">↓ Exporter la sélection (CSV)</button>
+  </div>
+
+  <div class="sec">
+    <h2>Fond de plan</h2>
+    <select id="base">
+      <option value="light">Clair (CartoDB Positron)</option>
+      <option value="topo">Relief (OpenTopoMap)</option>
+      <option value="sat">Satellite (Esri)</option>
+    </select>
+  </div>
+
+  <footer>
+    <b>Sources :</b> Zonage conventionnel MG : CartoSanté / ARS (extraction fournie, 403 communes ZIP).
+    Zones blanches : ARCEP, <i>4G data, T3 2024</i>, intersection des 4 opérateurs.
+    CPTS : ARS PACA / DSDP, janvier 2026. Contours communaux : IGN via france-geojson.<br><br>
+    <b>Lecture :</b> une commune est marquée "zone blanche" dès qu'une partie de son territoire
+    est concernée, sans pondération par population. L'indicateur surestime l'exposition réelle.
+  </footer>
+</div>
+
+<div id="map"></div>
+<div id="hoverbar"></div>
+<div id="loader">Chargement des données</div>
+
+<script src="vendor/leaflet.js"></script>
+<script>if(typeof L==="undefined"){document.write('<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>')}</script>
+<script>
+(function(){
+"use strict";
+if (typeof L === "undefined"){
+  document.getElementById("loader").textContent =
+    "Leaflet n'a pas pu être chargé. Vérifiez la connexion réseau.";
+  return;
+}
+
+var DEPT_ORDER = ["04","05","06","13","83","84"];
+var DEPTS = {"04":"Alpes-de-Haute-Provence","05":"Hautes-Alpes","06":"Alpes-Maritimes",
+             "13":"Bouches-du-Rhône","83":"Var","84":"Vaucluse"};
+var CPTS_STATUTS = {signataire:"Signataire du contrat ARS / Assurance Maladie",
+                    valide:"Projet de santé validé", redaction:"Projet en cours de rédaction",
+                    initiative:"Initiative repérée"};
+var css = function(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); };
+
+/* ---------- carte ---------- */
+var map = L.map("map",{ zoomControl:true, preferCanvas:true }).setView([43.85,6.1], 8);
+var bases = {
+  light: L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    {maxZoom:19, attribution:'&copy; OpenStreetMap, &copy; CARTO'}),
+  topo: L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+    {maxZoom:17, attribution:'&copy; OpenStreetMap, SRTM, OpenTopoMap (CC-BY-SA)'}),
+  sat: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    {maxZoom:18, attribution:'Esri, Maxar, Earthstar Geographics'})
+};
+var currentBase = bases.light.addTo(map);
+document.getElementById("base").addEventListener("change", function(e){
+  map.removeLayer(currentBase); currentBase = bases[e.target.value].addTo(map);
+});
+
+var svgRenderer = L.svg({padding:0.4});
+var gCommunes = L.layerGroup().addTo(map);
+var gZB       = L.layerGroup().addTo(map);
+var gCPTS     = L.layerGroup().addTo(map);
+
+/* ---------- état ---------- */
+var state = {
+  depts: new Set(DEPT_ORDER),
+  zip:true, non:false, zb:true, cpts:false, cross:false
+};
+var communes = [];      // {p:props, layer:L.Path}
+var byCode   = {};
+var zbLoaded = false, cptsLoaded = false;
+
+/* ---------- styles ---------- */
+function styleCommune(p){
+  var both = p.z===1 && p.b===1;
+  if (both)     return {color:css("--both"), weight:1.4, opacity:.95, fillColor:css("--both"), fillOpacity:.68};
+  if (p.z===1)  return {color:css("--zip"),  weight:1,   opacity:.9,  fillColor:css("--zip"),  fillOpacity:.55};
+  return             {color:css("--neutral"),weight:.6,  opacity:.65, fillColor:css("--neutral"),fillOpacity:.16};
+}
+// Contour seul : à Marseille, huit CPTS se superposent sur le même polygone
+// communal, et huit remplissages empilés donnent une tache opaque qui ne veut
+// rien dire. Le fill reste présent (opacité quasi nulle) pour rester cliquable.
+function styleCPTS(){ return {color:css("--cpts"), weight:1.6, opacity:.7, fillColor:css("--cpts"), fillOpacity:.03}; }
+
+/* ---------- popup / survol ---------- */
+function pill(c,t){ return '<span class="pill" style="background:'+c+'">'+t+'</span>'; }
+function numArr(code){ var n=parseInt(String(code).slice(-2),10); return n===1?"1er":n+"e"; }
+function esc(s){ return String(s).replace(/[&<>"]/g, function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+function popupHTML(p){
+  var h = '<h3>'+p.n+'</h3><div class="code">'+p.c+', '+(DEPTS[p.d]||p.d)+'</div><dl>';
+  h += '<dt>Zonage MG</dt><dd>'+(p.z===1 ? pill(css("--zip"),"ZIP") : '<span style="color:var(--ink-3)">hors ZIP</span>')+'</dd>';
+  if (p.z===1 && p.q>0) h += '<dt>QPV en ZIP</dt><dd>'+p.q+'</dd>';
+  h += '<dt>Zone blanche 4G</dt><dd>'+(!zbLoaded ? '<span style="color:var(--ink-3)">n. d.</span>'
+        : p.b===1 ? pill(css("--zb"),"concernée") : '<span style="color:var(--ink-3)">non</span>')+'</dd>';
+  if (cptsLoaded) h += '<dt>CPTS'+(p.ncpts>1 ? " ("+p.ncpts+")" : "")+'</dt><dd>'+
+      (p.cpts || '<span style="color:var(--ink-3);font-weight:400">aucune</span>')+'</dd>';
+  h += '</dl>';
+  if (p.z===1 && p.b===1) h += '<p style="margin:10px 0 0;font-size:12px;color:'+css("--both")+';font-weight:600">⚠ Cumul sous-densité médicale + zone blanche</p>';
+  return h;
+}
+var hb = document.getElementById("hoverbar");
+function showHover(p){
+  var t = "<b>"+p.n+"</b> <span style='color:var(--ink-3)'>"+p.c+"</span>";
+  if (p.z===1) t += '<span class="tag" style="background:'+css("--zip")+'">ZIP</span>';
+  if (p.b===1) t += '<span class="tag" style="background:'+css("--zb")+'">zone blanche</span>';
+  hb.innerHTML = t; hb.classList.add("on");
+}
+
+/* ---------- rendu ---------- */
+function visible(p){
+  if (!state.depts.has(p.d)) return false;
+  if (state.cross) return p.z===1 && p.b===1;
+  return p.z===1 ? state.zip : state.non;
+}
+function render(){
+  gCommunes.clearLayers();
+  var n=0, nz=0, nb=0, nboth=0, bounds=null;
+  for (var i=0;i<communes.length;i++){
+    var c = communes[i];
+    if (!visible(c.p)) continue;
+    gCommunes.addLayer(c.layer); n++;
+    if (c.p.z===1) nz++;
+    if (c.p.b===1) nb++;
+    if (c.p.z===1 && c.p.b===1) nboth++;
+  }
+  document.getElementById("s-tot").textContent  = n.toLocaleString("fr-FR");
+  document.getElementById("s-zip").textContent  = nz.toLocaleString("fr-FR");
+  document.getElementById("s-zb").textContent   = zbLoaded ? nb.toLocaleString("fr-FR") : "-";
+  document.getElementById("s-both").textContent = zbLoaded ? nboth.toLocaleString("fr-FR") : "-";
+
+  gZB.clearLayers();
+  if (state.zb && zbLoaded && !state.cross) zbLayers.forEach(function(o){
+    if (state.depts.has(o.d)) gZB.addLayer(o.layer);
+  });
+  gCPTS.clearLayers();
+  if (state.cpts && cptsLoaded) {
+    arrLayers.forEach(function(o){ gCPTS.addLayer(o.layer); });
+    cptsLayers.forEach(function(o){ gCPTS.addLayer(o.layer); });
+  }
+}
+function fitToDepts(){
+  var b = null;
+  communes.forEach(function(c){
+    if (!state.depts.has(c.p.d)) return;
+    b = b ? b.extend(c.layer.getBounds()) : L.latLngBounds(c.layer.getBounds().getSouthWest(), c.layer.getBounds().getNorthEast());
+  });
+  if (b) map.fitBounds(b, {padding:[24,24]});
+}
+
+/* ---------- panneau départements ---------- */
+var dbox = document.getElementById("depts");
+DEPT_ORDER.forEach(function(k){
+  var l = document.createElement("label"); l.className="row";
+  l.innerHTML = '<input type="checkbox" value="'+k+'" checked>'+k+' '+DEPTS[k]+'<span class="cnt" id="dc-'+k+'"></span>';
+  l.querySelector("input").addEventListener("change", function(e){
+    e.target.checked ? state.depts.add(k) : state.depts.delete(k);
+    render(); fitToDepts();
+  });
+  dbox.appendChild(l);
+});
+document.querySelectorAll("[data-all]").forEach(function(b){
+  b.addEventListener("click", function(){
+    var on = b.dataset.all === "1";
+    dbox.querySelectorAll("input").forEach(function(i){ i.checked = on; });
+    state.depts = on ? new Set(DEPT_ORDER) : new Set();
+    render(); if (on) fitToDepts();
+  });
+});
+[["l-zip","zip"],["l-non","non"],["l-zb","zb"],["l-cpts","cpts"]].forEach(function(pair){
+  document.getElementById(pair[0]).addEventListener("change", function(e){
+    state[pair[1]] = e.target.checked; render();
+  });
+});
+var crossBtn = document.getElementById("cross");
+crossBtn.disabled = true;
+crossBtn.title = "Nécessite la couche zones blanches";
+crossBtn.style.opacity = ".45";
+crossBtn.addEventListener("click", function(){
+  if (!zbLoaded) return;
+  state.cross = !state.cross;
+  crossBtn.setAttribute("aria-pressed", String(state.cross));
+  crossBtn.textContent = state.cross ? "✕ Revenir à la vue complète" : "Isoler les communes ZIP en zone blanche";
+  render();
+});
+document.getElementById("burger").addEventListener("click", function(){
+  var p = document.getElementById("panel");
+  p.classList.toggle("collapsed");
+  this.setAttribute("aria-expanded", String(!p.classList.contains("collapsed")));
+  setTimeout(function(){ map.invalidateSize(); }, 200);
+});
+document.getElementById("q").addEventListener("change", function(e){
+  var v = e.target.value.trim();
+  var c = byCode[v] || communes.filter(function(x){ return x.p.n.toLowerCase() === v.toLowerCase(); })[0];
+  if (!c) return;
+  if (!state.depts.has(c.p.d)){
+    state.depts.add(c.p.d);
+    dbox.querySelector('input[value="'+c.p.d+'"]').checked = true;
+  }
+  if (c.p.z===0) { state.non = true; document.getElementById("l-non").checked = true; }
+  if (state.cross) crossBtn.click();
+  render();
+  map.fitBounds(c.layer.getBounds(), {maxZoom:12, padding:[40,40]});
+  c.layer.openPopup();
+});
+document.getElementById("csv").addEventListener("click", function(){
+  var rows = [["code_insee","commune","departement","zip","qpv_zip","zone_blanche_4g"]];
+  communes.forEach(function(c){
+    if (!visible(c.p)) return;
+    rows.push([c.p.c, '"'+c.p.n.replace(/"/g,'""')+'"', c.p.d, c.p.z, c.p.q, zbLoaded ? c.p.b : ""]);
+  });
+  var blob = new Blob(["﻿"+rows.map(function(r){return r.join(";");}).join("\n")], {type:"text/csv;charset=utf-8"});
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "selection-paca.csv"; a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+});
+
+/* ---------- chargement ---------- */
+var zbLayers = [], cptsLayers = [];
+
+function loadJSON(url){
+  return fetch(url, {cache:"no-cache"}).then(function(r){
+    if (!r.ok) throw new Error(r.status+" "+url);
+    return r.json();
+  });
+}
+
+loadJSON("data/communes-paca.geojson").then(function(gj){
+  var dl = document.getElementById("communes"), frag = document.createDocumentFragment();
+  L.geoJSON(gj, {
+    renderer: L.canvas({padding:0.4}),
+    style: function(f){ return styleCommune(f.properties); },
+    onEachFeature: function(f, layer){
+      var p = f.properties;
+      var rec = {p:p, layer:layer};
+      communes.push(rec); byCode[p.c] = rec;
+      layer.bindPopup(function(){ return popupHTML(p); }, {maxWidth:300});
+      layer.on("mouseover", function(){ layer.setStyle({weight:2.6}); layer.bringToFront(); showHover(p); });
+      layer.on("mouseout",  function(){ layer.setStyle(styleCommune(p)); hb.classList.remove("on"); });
+      var o = document.createElement("option"); o.value = p.n; o.label = p.c+" "+p.n; frag.appendChild(o);
+    }
+  });
+  dl.appendChild(frag);
+  // compteurs par département + par couche
+  var byD = {};
+  communes.forEach(function(c){ byD[c.p.d] = (byD[c.p.d]||0)+1; });
+  DEPT_ORDER.forEach(function(k){
+    var e = document.getElementById("dc-"+k); if (e) e.textContent = (byD[k]||0);
+  });
+  document.getElementById("c-zip").textContent = communes.filter(function(c){return c.p.z===1;}).length;
+  document.getElementById("c-non").textContent = communes.filter(function(c){return c.p.z===0;}).length;
+  document.getElementById("loader").classList.add("done");
+  render(); fitToDepts();
+  chargerArrondissements()
+    .catch(function(){ /* couche de repère facultative */ })
+    .then(chargerCPTS);   // après les communes : le rattachement a besoin de byCode
+  return loadJSON("data/zones-blanches-4g.geojson");
+})
+.then(function(gj){
+  L.geoJSON(gj, {
+    renderer: svgRenderer,
+    style: function(){ return {color:css("--zb"), weight:1, opacity:.9, fillOpacity:1, className:"zb-path"}; },
+    onEachFeature: function(f, layer){
+      var p = f.properties;
+      zbLayers.push({d:p.d, layer:layer});
+      layer.bindPopup("<h3>Zone blanche 4G</h3><div class='code'>"+(DEPTS[p.d]||p.d)+"</div>"+
+        "<dl><dt>Superficie</dt><dd>"+(p.km2!=null ? p.km2.toLocaleString("fr-FR")+" km²" : "n. d.")+"</dd>"+
+        "<dt>Définition</dt><dd>aucun des 4 opérateurs</dd><dt>Millésime</dt><dd>ARCEP T3 2024</dd></dl>");
+    }
+  });
+  zbLoaded = true;
+  crossBtn.disabled = false; crossBtn.style.opacity = ""; crossBtn.title = "";
+  var km2 = gj.features.reduce(function(a,f){ return a + (f.properties.km2||0); }, 0);
+  var npol = gj.features.reduce(function(a,f){ return a + (f.properties.n||1); }, 0);
+  document.getElementById("c-zb").textContent = Math.round(km2).toLocaleString("fr-FR") + " km²";
+  document.getElementById("w-zb").title = npol + " polygones, " + Math.round(km2) + " km², ARCEP T3 2024";
+  render();
+})
+.catch(function(err){
+  console.warn("Zones blanches indisponibles :", err.message);
+  var w = document.getElementById("w-zb");
+  if (w && !zbLoaded){
+    w.classList.add("off");
+    w.querySelector("input").checked = false; w.querySelector("input").disabled = true;
+    document.getElementById("c-zb").textContent = "indispo.";
+    var cn = document.querySelector("#cross + .note");
+    if (cn) cn.innerHTML = '<span class="warn">Croisement indisponible : la couche zones blanches ' +
+      'n\'a pas pu être chargée (<code>data/zones-blanches-4g.geojson</code>).</span>';
+  }
+  document.getElementById("loader").classList.add("done");
+});
+
+var arrLayers = [], cptsParArr = {};
+
+// Couche de repère : les 16 arrondissements municipaux de Marseille, en trait
+// fin sous les CPTS. Elle rend visible le 1er arrondissement, seul à n'être
+// couvert par aucune CPTS du listing.
+function chargerArrondissements(){ return loadJSON("data/arrondissements-marseille.geojson").then(function(gj){
+  L.geoJSON(gj, {
+    renderer: svgRenderer,
+    style: function(){ return {color:css("--cpts"), weight:.9, opacity:.55,
+      dashArray:"3 3", fill:true, fillOpacity:0}; },
+    onEachFeature: function(f, layer){
+      var p = f.properties;
+      arrLayers.push({layer:layer});
+      layer.bindPopup(function(){
+        var noms = cptsParArr[p.c] || [];
+        return "<h3>"+esc(p.n)+"</h3><div class='code'>"+p.c+", arrondissement municipal de Marseille</div><dl>"+
+          "<dt>Superficie</dt><dd>"+p.km2.toLocaleString("fr-FR")+" km²</dd>"+
+          "<dt>CPTS</dt><dd>"+(noms.length ? esc(noms.join(" / "))
+            : '<span style="color:var(--ink-3);font-weight:400">aucune</span>')+"</dd></dl>";
+      });
+    }
+  });
+}); }
+
+function chargerCPTS(){ return loadJSON("data/cpts.geojson").then(function(gj){
+  L.geoJSON(gj, {
+    renderer: svgRenderer,
+    style: styleCPTS,
+    onEachFeature: function(f, layer){
+      var p = f.properties || {};
+      cptsLayers.push({layer:layer});
+      // Une commune peut relever de plusieurs CPTS (Marseille : 8, Nice : 3,
+      // Toulon : 2). On accumule au lieu d'écraser.
+      (p.arrondissements||[]).forEach(function(a){
+        (cptsParArr[a] = cptsParArr[a] || []).push(p.nom);
+      });
+      (p.communes||[]).forEach(function(code){
+        if (!byCode[code]) return;
+        var q = byCode[code].p;
+        q.cpts = q.cpts ? q.cpts + " / " + p.nom : p.nom;
+        q.ncpts = (q.ncpts||0) + 1;
+      });
+      var h = "<h3>"+(p.nom||"CPTS")+"</h3><dl>";
+      h += "<dt>Statut</dt><dd>"+(CPTS_STATUTS[p.statut]||p.statut||
+           '<span style="color:var(--ink-3);font-weight:400">n. d.</span>')+"</dd>";
+      var nArr = (p.arrondissements||[]).length;
+      // Pour une CPTS marseillaise, "1 commune" induirait en erreur : l'unité
+      // qui a du sens est l'arrondissement.
+      if (nArr && p.communes && p.communes.length > 1)
+        h += "<dt>Communes</dt><dd>"+(p.communes.length-1)+" + Marseille</dd>";
+      else if (!nArr && p.communes)
+        h += "<dt>Communes</dt><dd>"+p.communes.length+"</dd>";
+      if (p.president)     h += "<dt>Présidence</dt><dd>"+esc(p.president)+"</dd>";
+      if (p.coordonnateur) h += "<dt>Coordination</dt><dd>"+esc(p.coordonnateur)+"</dd>";
+      if (p.contact)   h += '<dt>Contact</dt><dd><a href="mailto:'+encodeURIComponent(p.contact)+'">'+esc(p.contact)+'</a></dd>';
+      if (nArr) h += "<dt>Arrondissements</dt><dd>"+esc(p.arrondissements.map(numArr).join(", "))+
+        ' <span style="font-weight:400;color:var(--ink-3)">de Marseille</span></dd>';
+      if (p.site)      h += '<dt>Site</dt><dd><a href="'+(/^https?:/.test(p.site)?esc(p.site):"https://"+esc(p.site))+'" target="_blank" rel="noopener">'+esc(p.site)+'</a></dd>';
+      h += "</dl>";
+      if (p.arrondissements) h += '<dt>Arrondissements</dt><dd>'+
+           esc(p.arrondissements.map(numArr).join(", "))+'</dd>';
+      if (p.infra) h += '<p style="margin:10px 0 0;font-size:11.5px;line-height:1.5;color:var(--ink-3)">Plusieurs CPTS se partagent '+
+           esc(p.infra.join(", "))+', que le listing ARS ne subdivise pas et pour laquelle il n\'existe pas d\'arrondissement municipal. Le contour affiché est celui de la commune entière : le périmètre réel de cette CPTS est plus petit.</p>';
+      layer.bindPopup(h, {maxWidth:320});
+    }
+  });
+  cptsLoaded = true;
+  var couvertes = {};
+  gj.features.forEach(function(f){ (f.properties.communes||[]).forEach(function(c){ couvertes[c]=1; }); });
+  var nc = Object.keys(couvertes).length, sans = communes.length - nc;
+  document.getElementById("c-cpts").textContent = cptsLayers.length;
+  document.getElementById("l-cpts").checked = true; state.cpts = true;
+  document.getElementById("cpts-note").textContent =
+    nc + " communes rattachées à une CPTS" + (sans ? ", " + sans + " sans." : ".");
+  render();
+}).catch(function(){
+  var w = document.getElementById("w-cpts");
+  w.classList.add("off");
+  w.querySelector("input").disabled = true;
+  document.getElementById("c-cpts").textContent = "à importer";
+  document.getElementById("cpts-note").innerHTML =
+    '<span class="warn">Couche câblée mais sans données. Déposez <code>data/cpts.geojson</code> ' +
+    '(procédure dans le README) : la couche s\'active sans toucher au code.</span>';
+}); }
+})();
+</script>
+<style>
+.zb-path{ fill:url(#hatchZB); }
+</style>
+</body>
+</html>
