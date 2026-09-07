@@ -78,6 +78,33 @@ def main(qpv_path, out):
               ensure_ascii=False, separators=(",", ":"))
     print("arrondissements-marseille.geojson : %d" % len(arr))
 
+    # Contours QPV : un petit carré posé dans la commune de rattachement, avec
+    # le zonage repris du fichier d'arrêté. Reproduit le cas des QPV à cheval
+    # (plusieurs communes dans `com`) qui pilote le filtre par périmètre CPTS.
+    par_qpv = {}
+    for code, e in qpv["communes"].items():
+        for q in e["qpv"]:
+            par_qpv.setdefault(q["id"], {"n": q["n"], "z": q["z"], "com": []})
+            par_qpv[q["id"]]["com"].append(code)
+    geom_com = {f["properties"]["c"]: f["geometry"] for f in feats}
+    qf, k = [], {}
+    for qid, e in sorted(par_qpv.items()):
+        c0 = sorted(e["com"])[0]
+        if c0 not in geom_com:
+            continue
+        base = geom_com[c0]["coordinates"][0][0]
+        i = k[c0] = k.get(c0, 0) + 1
+        qf.append({"type": "Feature",
+                   "properties": {"q": qid, "n": e["n"], "z": e["z"],
+                                  "d": c0[:2], "com": sorted(e["com"])},
+                   "geometry": carre(base[0] + 0.002 * (i % 5),
+                                     base[1] + 0.002 * (i // 5), 0.0015)})
+    json.dump({"type": "FeatureCollection", "millesime": qpv["millesime"],
+               "features": qf},
+              open(os.path.join(out, "qpv-paca.geojson"), "w"),
+              ensure_ascii=False, separators=(",", ":"))
+    print("qpv-paca.geojson : %d contours QPV" % len(qf))
+
     # CPTS : une par département sur des communes réelles de l'arrêté, plus
     # trois CPTS marseillaises qui se partagent les arrondissements (le cas
     # qui casse le plus facilement), et une CPTS sans contact ni site.

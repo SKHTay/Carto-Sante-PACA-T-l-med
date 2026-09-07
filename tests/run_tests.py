@@ -39,7 +39,7 @@ def nombre(txt):
     return int(txt.replace("\u202f", "").replace("\u00a0", "").replace(" ", "") or 0)
 
 
-def main(sans_qpv=False, sans_cpts=False):
+def main(sans_qpv=False, sans_cpts=False, sans_contours=False):
     srv, port = serveur()
     attendu = json.load(open(os.path.join(RACINE, "qpv-zonage.json"), encoding="utf-8"))
 
@@ -58,12 +58,15 @@ def main(sans_qpv=False, sans_cpts=False):
             pg.route("**/qpv-zonage.json", lambda r: r.fulfill(status=404, body="nope"))
         if sans_cpts:
             pg.route("**/cpts.geojson", lambda r: r.fulfill(status=404, body="nope"))
+        if sans_contours:
+            pg.route("**/qpv-paca.geojson", lambda r: r.fulfill(status=404, body="nope"))
         pg.goto(url)
         pg.wait_for_function("document.getElementById('loader').classList.contains('done')",
                              timeout=20000)
         pg.wait_for_timeout(1200)
 
-        titre = "SANS QPV" if sans_qpv else ("SANS CPTS" if sans_cpts else "NOMINAL")
+        titre = ("SANS QPV" if sans_qpv else "SANS CPTS" if sans_cpts
+                 else "SANS CONTOURS QPV" if sans_contours else "NOMINAL")
         print("\n=== %s ===" % titre)
         ok("aucune erreur JS", not erreurs, erreurs[:3])
 
@@ -115,6 +118,59 @@ def main(sans_qpv=False, sans_cpts=False):
                "Saint Henri" in popup and pg.locator(".qpvlist li").count() == 41,
                pg.locator(".qpvlist li").count())
             pg.keyboard.press("Escape")
+
+        # ------------------------------------------------- contours des QPV
+        contours = json.load(open(os.path.join(RACINE, "qpv-paca.geojson"),
+                                  encoding="utf-8"))["features"]
+        if sans_contours:
+            ok("couche QPV désactivée sans contours", pg.is_disabled("#l-qpv"))
+            ok("compteur signale l'import", pg.inner_text("#c-qpv") == "à importer")
+            ok("aucun contour tracé",
+               pg.evaluate("document.querySelectorAll('path[data-qpv]').length") == 0)
+        else:
+            pg.click('[data-all="1"]')
+            pg.wait_for_timeout(400)
+            ok("compteur de contours QPV",
+               pg.inner_text("#c-qpv") == str(len(contours)), pg.inner_text("#c-qpv"))
+            ok("case QPV cochée par défaut", pg.is_checked("#l-qpv"))
+
+            n_avec = pg.evaluate(
+                "document.querySelectorAll('path.leaflet-interactive').length")
+            pg.uncheck("#l-qpv")
+            pg.wait_for_timeout(400)
+            n_sans = pg.evaluate(
+                "document.querySelectorAll('path.leaflet-interactive').length")
+            ok("décocher retire bien %d tracés" % len(contours),
+               n_avec - n_sans == len(contours), "%d - %d" % (n_avec, n_sans))
+            pg.check("#l-qpv")
+            pg.wait_for_timeout(400)
+
+            # Le croisement doit masquer les quartiers.
+            pg.click("#cross")
+            pg.wait_for_timeout(400)
+            n_cross = pg.evaluate(
+                "document.querySelectorAll('path.leaflet-interactive').length")
+            pg.click("#cross")
+            pg.wait_for_timeout(400)
+            ok("croisement : contours QPV masqués",
+               n_cross <= n_avec - len(contours), "%d vs %d" % (n_cross, n_avec))
+
+            # Filtre départemental appliqué aux quartiers.
+            pg.click('[data-all="0"]')
+            pg.check('#depts input[value="13"]')
+            pg.wait_for_timeout(500)
+            n13 = sum(1 for f in contours if f["properties"]["d"] == "13")
+            n_dep = pg.evaluate(
+                "document.querySelectorAll('path.leaflet-interactive').length")
+            pg.uncheck("#l-qpv")
+            pg.wait_for_timeout(400)
+            n_dep_sans = pg.evaluate(
+                "document.querySelectorAll('path.leaflet-interactive').length")
+            ok("seuls les QPV des Bouches-du-Rhône sont tracés",
+               n_dep - n_dep_sans == n13, "%d vs %d" % (n_dep - n_dep_sans, n13))
+            pg.check("#l-qpv")
+            pg.click('[data-all="1"]')
+            pg.wait_for_timeout(400)
 
         # ---------------------------------------------------------- menu CPTS
         opts = pg.locator("#cpts-select option")
@@ -248,6 +304,7 @@ if __name__ == "__main__":
     main()
     main(sans_qpv=True)
     main(sans_cpts=True)
+    main(sans_contours=True)
     print("\n" + ("=" * 50))
     if ECHECS:
         print("%d ÉCHEC(S) :" % len(ECHECS))
