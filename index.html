@@ -51,7 +51,33 @@ body{
 .stat.zip .v{color:var(--zip)} .stat.zb .v{color:var(--zb)} .stat.both .v{color:var(--both)}
 .stat.qzip .v{color:var(--zip)} .stat.qzac .v{color:var(--zac)}
 .stat.off{opacity:.45}
-/* fiche de la CPTS choisie dans le menu déroulant */
+/* panneau dépliant de sélection multiple des CPTS */
+.dropbtn{width:100%;text-align:left;font:inherit;font-size:12.5px;cursor:pointer;
+  background:var(--surface-1);border:1px solid var(--ring);border-radius:8px;
+  padding:8px 26px 8px 11px;color:var(--ink-1);position:relative}
+.dropbtn:after{content:"▾";position:absolute;right:11px;color:var(--ink-3)}
+.dropbtn[aria-expanded="true"]:after{content:"▴"}
+.dropbtn:disabled{opacity:.45;cursor:not-allowed}
+#cpts-menu{margin-top:6px;border:1px solid var(--ring);border-radius:8px;
+  background:var(--surface-1);padding:8px}
+#cpts-menu[hidden]{display:none}
+#cpts-q{width:100%;font:inherit;font-size:12px;padding:6px 9px;border-radius:6px;
+  border:1px solid var(--ring);background:var(--surface-0);color:var(--ink-1)}
+.minilinks{display:flex;gap:10px;align-items:center;font-size:11px;margin:7px 1px 5px}
+.minilinks a{color:var(--accent);text-decoration:none}
+.minilinks a:hover{text-decoration:underline}
+.minilinks span{margin-left:auto;color:var(--ink-3)}
+/* Hauteur bornée : soixante-dix CPTS repousseraient tout le reste du panneau
+   hors de l'écran. La liste défile, le panneau ne bouge pas. */
+#cpts-list{max-height:230px;overflow-y:auto;overscroll-behavior:contain}
+#cpts-list .grp{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--ink-3);margin:8px 0 3px;font-weight:600}
+#cpts-list .grp:first-child{margin-top:2px}
+#cpts-list label{display:flex;gap:7px;align-items:flex-start;font-size:12px;
+  padding:3px 2px;cursor:pointer;line-height:1.35}
+#cpts-list label:hover{color:var(--accent)}
+#cpts-list input{margin:2px 0 0;flex:0 0 auto}
+#cpts-list .vide{font-size:11.5px;color:var(--ink-3);padding:8px 2px}
 #cpts-fiche{margin-top:9px;background:var(--surface-1);border:1px solid var(--ring);
   border-radius:8px;padding:10px 11px}
 #cpts-fiche[hidden]{display:none}
@@ -162,12 +188,20 @@ footer b{color:var(--ink-2);font-weight:600}
 
   <div class="sec" id="sec-cpts">
     <h2><span class="swatch" style="background:var(--cpts);display:inline-block;vertical-align:-1px;margin-right:6px"></span>CPTS<span class="cnt" id="c-cpts"></span></h2>
-    <select id="cpts-select" aria-label="Afficher les CPTS">
-      <option value="">Chargement…</option>
-    </select>
+    <button type="button" id="cpts-toggle" class="dropbtn" aria-expanded="false"
+            aria-controls="cpts-menu" disabled>Chargement…</button>
+    <div id="cpts-menu" hidden>
+      <input type="search" id="cpts-q" placeholder="Filtrer par nom ou département" autocomplete="off">
+      <div class="minilinks">
+        <a href="#" data-cpts-all="1">Toutes</a>
+        <a href="#" data-cpts-all="0">Aucune</a>
+        <span id="cpts-vus"></span>
+      </div>
+      <div id="cpts-list"></div>
+    </div>
     <div id="cpts-fiche" hidden></div>
     <label class="row off" id="w-restr" style="margin-top:4px">
-      <input type="checkbox" id="l-restr" disabled>Restreindre la sélection à cette CPTS</label>
+      <input type="checkbox" id="l-restr" disabled>Restreindre la sélection aux CPTS cochées</label>
     <p class="note" id="cpts-note"></p>
   </div>
 
@@ -260,11 +294,11 @@ var gQPV      = L.layerGroup().addTo(map);
 var gCPTS     = L.layerGroup().addTo(map);
 
 /* ---------- état ---------- */
-// state.cpts remplace l'ancien booléen : "" = couche masquée, "*" = toutes,
-// sinon l'indice de la CPTS choisie dans cptsLayers.
+// state.cpts : ensemble des indices sélectionnés dans cptsLayers. Vide = aucune
+// CPTS affichée ; tous les indices = équivalent de l'ancien « toutes ».
 var state = {
   depts: new Set(DEPT_ORDER),
-  zip:true, non:false, zb:true, qpv:true, cpts:"", restr:false, cross:false
+  zip:true, non:false, zb:true, qpv:true, cpts:new Set(), restr:false, cross:false
 };
 var communes = [];      // {p:props, layer:L.Path}
 var byCode   = {};
@@ -342,15 +376,32 @@ function showHover(p){
 }
 
 /* ---------- rendu ---------- */
-// CPTS actuellement mise en avant, ou null si « toutes » / couche masquée.
-function cptsChoisie(){
-  return (cptsLoaded && state.cpts !== "" && state.cpts !== "*")
-    ? cptsLayers[+state.cpts] : null;
+// CPTS actuellement cochées. Liste vide = couche masquée.
+function cptsSel(){
+  if (!cptsLoaded) return [];
+  return cptsLayers.filter(function(o, i){ return state.cpts.has(i); });
 }
+// Vrai quand la sélection est un sous-ensemble : on peut alors épaissir le
+// trait et remplir, puisque plus rien ne se superpose massivement.
+function cptsPartiel(){
+  return state.cpts.size > 0 && state.cpts.size < cptsLayers.length;
+}
+// Union des communes des CPTS cochées, pour la restriction de sélection.
+// Recalculée une fois par rendu et mémorisée : visible() est appelée 947 fois,
+// reconstruire l'union à chaque appel coûterait cher pour rien.
+var restrCodes = null;
+function cptsCodes(){
+  if (restrCodes) return restrCodes;
+  var u = {};
+  cptsSel().forEach(function(o){
+    for (var c in o.codes) u[c] = 1;
+  });
+  return (restrCodes = u);
+}
+function invaliderCodes(){ restrCodes = null; }
 function visible(p){
   if (!state.depts.has(p.d)) return false;
-  var sel = cptsChoisie();
-  if (state.restr && sel && !sel.codes[p.c]) return false;
+  if (state.restr && cptsPartiel() && !cptsCodes()[p.c]) return false;
   if (state.cross) return p.z===1 && p.b===1;
   return p.z===1 ? state.zip : state.non;
 }
@@ -392,24 +443,26 @@ function render(){
   // la lecture.
   gQPV.clearLayers();
   if (state.qpv && contoursLoaded && !state.cross){
-    var selq = cptsChoisie();
+    var restreint = state.restr && cptsPartiel(), codesq = restreint ? cptsCodes() : null;
     qpvLayers.forEach(function(o){
       if (!state.depts.has(o.p.d)) return;
-      if (state.restr && selq && !o.p.com.some(function(c){ return selq.codes[c]; })) return;
+      // Un QPV à cheval reste visible dès qu'une seule de ses communes entre
+      // dans le périmètre : le quartier ne se coupe pas en deux.
+      if (restreint && !o.p.com.some(function(c){ return codesq[c]; })) return;
       gQPV.addLayer(o.layer);
     });
   }
 
   gCPTS.clearLayers();
-  if (cptsLoaded && state.cpts !== "") {
-    var sel = cptsChoisie();
+  var choisies = cptsSel();
+  if (choisies.length) {
+    var partiel = cptsPartiel();
     // Les arrondissements ne servent de repère que si Marseille est à l'écran :
     // seize contours pointillés autour d'une CPTS varoise ne renseignent rien.
-    if (!sel || (sel.p.arrondissements || []).length)
+    if (choisies.some(function(o){ return (o.p.arrondissements || []).length; }))
       arrLayers.forEach(function(o){ gCPTS.addLayer(o.layer); });
-    cptsLayers.forEach(function(o){
-      if (sel && o !== sel) return;
-      o.layer.setStyle(styleCPTS(!!sel));
+    choisies.forEach(function(o){
+      o.layer.setStyle(styleCPTS(partiel));
       gCPTS.addLayer(o.layer);
     });
   }
@@ -449,11 +502,32 @@ document.querySelectorAll("[data-all]").forEach(function(b){
 });
 
 /* ---------- menu déroulant CPTS ---------- */
-var cptsSelect = document.getElementById("cpts-select"),
-    cptsFiche  = document.getElementById("cpts-fiche"),
-    restrBox   = document.getElementById("l-restr"),
-    restrRow   = document.getElementById("w-restr");
-cptsSelect.disabled = true;
+/* ---------- sélection multiple des CPTS ---------- */
+var cptsBtn   = document.getElementById("cpts-toggle"),
+    cptsMenu  = document.getElementById("cpts-menu"),
+    cptsListe = document.getElementById("cpts-list"),
+    cptsFiltre= document.getElementById("cpts-q"),
+    cptsVus   = document.getElementById("cpts-vus"),
+    cptsFiche = document.getElementById("cpts-fiche"),
+    restrBox  = document.getElementById("l-restr"),
+    restrRow  = document.getElementById("w-restr");
+
+function ouvrirMenuCPTS(ouvrir){
+  cptsMenu.hidden = !ouvrir;
+  cptsBtn.setAttribute("aria-expanded", ouvrir ? "true" : "false");
+  if (ouvrir) cptsFiltre.focus();
+}
+cptsBtn.addEventListener("click", function(){
+  ouvrirMenuCPTS(cptsMenu.hidden);
+});
+// Un clic hors du panneau le referme, comme le ferait un vrai menu déroulant.
+document.addEventListener("click", function(e){
+  if (!cptsMenu.hidden && !document.getElementById("sec-cpts").contains(e.target))
+    ouvrirMenuCPTS(false);
+});
+document.addEventListener("keydown", function(e){
+  if (e.key === "Escape" && !cptsMenu.hidden) ouvrirMenuCPTS(false);
+});
 
 function remplirMenuCPTS(){
   // Regroupement par département : soixante-dix entrées à plat ne se
@@ -463,21 +537,130 @@ function remplirMenuCPTS(){
   cptsLayers.forEach(function(o, i){
     (parDep[o.dep] = parDep[o.dep] || []).push({i:i, nom:o.p.nom || "CPTS"});
   });
-  var h = '<option value="">Masquer la couche</option>' +
-          '<option value="*">Toutes les CPTS (' + cptsLayers.length + ')</option>';
+  var h = "";
   DEPT_ORDER.concat(Object.keys(parDep).filter(function(d){
     return DEPT_ORDER.indexOf(d) < 0;
   })).forEach(function(d){
     var l = parDep[d];
     if (!l) return;
     l.sort(function(a, b){ return a.nom.localeCompare(b.nom, "fr"); });
-    h += '<optgroup label="' + esc(d + " — " + (DEPTS[d] || d)) + '">';
-    l.forEach(function(x){ h += '<option value="' + x.i + '">' + esc(x.nom) + '</option>'; });
-    h += '</optgroup>';
+    h += '<div class="grp" data-dep="' + esc(d) + '">' +
+         esc(d + " — " + (DEPTS[d] || d)) + '</div>';
+    l.forEach(function(x){
+      h += '<label data-i="' + x.i + '" data-nom="' + esc(x.nom.toLowerCase()) +
+           '" data-dep="' + esc(d) + '">' +
+           '<input type="checkbox" value="' + x.i + '">' +
+           '<span>' + esc(x.nom) + '</span></label>';
+    });
   });
-  cptsSelect.innerHTML = h;
-  cptsSelect.disabled = false;
-  cptsSelect.value = state.cpts;
+  cptsListe.innerHTML = h + '<div class="vide" hidden>Aucune CPTS ne correspond.</div>';
+  cptsBtn.disabled = false;
+  syncCasesCPTS();
+}
+
+// Les cases suivent l'état, jamais l'inverse : le filtre de recherche masque
+// des lignes sans jamais toucher à la sélection.
+function syncCasesCPTS(){
+  Array.prototype.forEach.call(cptsListe.querySelectorAll("input"), function(i){
+    i.checked = state.cpts.has(+i.value);
+  });
+  majEtiquetteCPTS();
+}
+
+function majEtiquetteCPTS(){
+  var n = state.cpts.size, tot = cptsLayers.length;
+  cptsBtn.textContent = n === 0   ? "Aucune CPTS affichée"
+                      : n === tot ? "Toutes les CPTS (" + tot + ")"
+                      : n === 1   ? cptsSel()[0].p.nom
+                      : n + " CPTS sélectionnées";
+  var partiel = cptsPartiel();
+  restrBox.disabled = !partiel;
+  restrRow.classList.toggle("off", !partiel);
+  if (!partiel && restrBox.checked){ restrBox.checked = false; state.restr = false; }
+  // La fiche détaillée n'a de sens que pour une CPTS : au-delà, elle
+  // deviendrait un pavé illisible dans un panneau déjà chargé.
+  if (n === 1){
+    cptsFiche.innerHTML = ficheCPTS(cptsSel()[0]);
+    cptsFiche.hidden = false;
+  } else {
+    cptsFiche.hidden = true;
+    cptsFiche.innerHTML = "";
+  }
+}
+
+function filtrerMenuCPTS(){
+  var q = cptsFiltre.value.trim().toLowerCase(), n = 0;
+  Array.prototype.forEach.call(cptsListe.querySelectorAll("label"), function(l){
+    var ok = !q || l.dataset.nom.indexOf(q) >= 0 ||
+             l.dataset.dep.indexOf(q) === 0 ||
+             (DEPTS[l.dataset.dep] || "").toLowerCase().indexOf(q) >= 0;
+    l.hidden = !ok;
+    if (ok) n++;
+  });
+  // Un titre de département sans aucune CPTS visible en dessous est du bruit.
+  Array.prototype.forEach.call(cptsListe.querySelectorAll(".grp"), function(g){
+    g.hidden = !cptsListe.querySelector('label[data-dep="' + g.dataset.dep + '"]:not([hidden])');
+  });
+  cptsListe.querySelector(".vide").hidden = n > 0;
+  cptsVus.textContent = q ? n + " sur " + cptsLayers.length : "";
+}
+cptsFiltre.addEventListener("input", filtrerMenuCPTS);
+
+cptsListe.addEventListener("change", function(e){
+  if (e.target.tagName !== "INPUT") return;
+  var i = +e.target.value;
+  if (e.target.checked) state.cpts.add(i); else state.cpts.delete(i);
+  appliquerCPTS(e.target.checked ? [cptsLayers[i]] : []);
+});
+
+// « Toutes » / « Aucune » n'agissent que sur les lignes visibles : après un
+// filtre « 13 », « Toutes » coche les CPTS des Bouches-du-Rhône, pas les 70.
+Array.prototype.forEach.call(document.querySelectorAll("[data-cpts-all]"), function(a){
+  a.addEventListener("click", function(e){
+    e.preventDefault();
+    var tout = a.dataset.cptsAll === "1";
+    Array.prototype.forEach.call(cptsListe.querySelectorAll("label"), function(l){
+      if (l.hidden) return;
+      var i = +l.dataset.i;
+      if (tout) state.cpts.add(i); else state.cpts.delete(i);
+    });
+    syncCasesCPTS();
+    appliquerCPTS(tout ? cptsSel() : []);
+  });
+});
+
+// Traitement commun à tout changement de sélection : invalider le cache des
+// communes, réafficher, rouvrir les départements concernés et recadrer.
+function appliquerCPTS(aCadrer){
+  invaliderCodes();
+  majEtiquetteCPTS();
+  var sel = cptsSel();
+  // Une CPTS dont le département est décoché ne s'afficherait pas : la cocher
+  // vaut demande de la voir, on rouvre les départements qu'il faut.
+  var rouvert = false;
+  sel.forEach(function(o){
+    o.deps.forEach(function(d){
+      if (state.depts.has(d)) return;
+      state.depts.add(d);
+      rouvert = true;
+      var i = dbox.querySelector('input[value="' + d + '"]');
+      if (i) i.checked = true;
+    });
+  });
+  state.restr = restrBox.checked && cptsPartiel();
+  invaliderCodes();
+  render();
+  if (aCadrer && aCadrer.length) cadrerCPTS(aCadrer);
+  else if (rouvert) fitToDepts();
+}
+
+function cadrerCPTS(liste){
+  var b = null;
+  (liste || cptsSel()).forEach(function(o){
+    try { b = b ? b.extend(o.layer.getBounds()) : o.layer.getBounds().pad(0); }
+    catch (e) { /* géométrie dégénérée : on l'ignore */ }
+  });
+  if (b && b.isValid()) map.fitBounds(b, {padding:[30,30], maxZoom:13});
 }
 
 function ficheCPTS(o){
@@ -503,41 +686,9 @@ function ficheCPTS(o){
   return h + '</dl>';
 }
 
-function cadrerCPTS(){
-  var sel = cptsChoisie();
-  if (!sel) return;
-  try { map.fitBounds(sel.layer.getBounds(), {padding:[30,30], maxZoom:13}); }
-  catch (e) { /* géométrie dégénérée : on laisse la vue en place */ }
-}
-
-cptsSelect.addEventListener("change", function(){
-  state.cpts = cptsSelect.value;
-  var sel = cptsChoisie();
-  restrBox.disabled = !sel;
-  restrRow.classList.toggle("off", !sel);
-  if (!sel) restrBox.checked = false;
-  state.restr = restrBox.checked && !!sel;
-  if (sel){
-    cptsFiche.innerHTML = ficheCPTS(sel);
-    cptsFiche.hidden = false;
-    // Une CPTS dont le département est décoché ne s'afficherait pas : choisir
-    // une CPTS vaut demande de la voir, on rouvre les départements qu'il faut.
-    sel.deps.forEach(function(d){
-      if (state.depts.has(d)) return;
-      state.depts.add(d);
-      var i = dbox.querySelector('input[value="' + d + '"]');
-      if (i) i.checked = true;
-    });
-  } else {
-    cptsFiche.hidden = true;
-    cptsFiche.innerHTML = "";
-  }
-  render();
-  cadrerCPTS();
-});
-
 restrBox.addEventListener("change", function(){
-  state.restr = restrBox.checked && !!cptsChoisie();
+  state.restr = restrBox.checked && cptsPartiel();
+  invaliderCodes();
   render();
   if (state.restr) cadrerCPTS();
 });
@@ -567,11 +718,10 @@ document.getElementById("q").addEventListener("change", function(e){
     dbox.querySelector('input[value="'+c.p.d+'"]').checked = true;
   }
   if (c.p.z===0) { state.non = true; document.getElementById("l-non").checked = true; }
-  // Une commune hors du périmètre de la CPTS choisie resterait masquée : la
+  // Une commune hors du périmètre des CPTS cochées resterait masquée : la
   // recherche est une demande explicite, elle l'emporte sur la restriction.
-  var selc = cptsChoisie();
-  if (state.restr && selc && !selc.codes[c.p.c]){
-    restrBox.checked = false; state.restr = false;
+  if (state.restr && !cptsCodes()[c.p.c]){
+    restrBox.checked = false; state.restr = false; invaliderCodes();
   }
   if (state.cross) crossBtn.click();
   render();
@@ -855,15 +1005,18 @@ function chargerCPTS(){ return loadJSON("cpts.geojson").then(function(gj){
   document.getElementById("c-cpts").textContent = cptsLayers.length;
   // Défaut « toutes » : identique à l'ancien comportement, où la couche
   // s'allumait dès que le fichier était disponible.
-  state.cpts = "*";
+  state.cpts = new Set(cptsLayers.map(function(_, i){ return i; }));
+  invaliderCodes();
   remplirMenuCPTS();
   document.getElementById("cpts-note").textContent =
     nc + " communes rattachées à une CPTS" + (sans ? ", " + sans + " sans." : ".");
   render();
 }).catch(function(){
-  cptsSelect.innerHTML = '<option value="">Couche indisponible</option>';
-  cptsSelect.disabled = true;
-  state.cpts = "";
+  cptsBtn.textContent = "Couche indisponible";
+  cptsBtn.disabled = true;
+  cptsMenu.hidden = true;
+  state.cpts = new Set();
+  invaliderCodes();
   document.getElementById("c-cpts").textContent = "à importer";
   document.getElementById("cpts-note").innerHTML =
     '<span class="warn">Couche câblée mais sans données. Déposez <code>cpts.geojson</code> ' +
