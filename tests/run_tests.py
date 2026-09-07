@@ -35,6 +35,18 @@ def serveur():
     return srv, srv.server_address[1]
 
 
+def ouvrir_cpts(pg):
+    """Rouvre le panneau CPTS s'il est replié.
+
+    Tout clic hors de la section (case d'une autre couche, lien départements,
+    touche Échap, clic sur la carte) le referme — c'est le comportement voulu
+    d'un menu déroulant. Les tests doivent donc le rouvrir avant d'y toucher.
+    """
+    if not pg.is_visible("#cpts-menu"):
+        pg.click("#cpts-toggle")
+        pg.wait_for_timeout(200)
+
+
 def nombre(txt):
     return int(txt.replace("\u202f", "").replace("\u00a0", "").replace(" ", "") or 0)
 
@@ -172,73 +184,170 @@ def main(sans_qpv=False, sans_cpts=False, sans_contours=False):
             pg.click('[data-all="1"]')
             pg.wait_for_timeout(400)
 
-        # ---------------------------------------------------------- menu CPTS
-        opts = pg.locator("#cpts-select option")
+        # ------------------------------------------------ sélection des CPTS
         if sans_cpts:
-            ok("menu désactivé sans données", pg.is_disabled("#cpts-select"))
+            ok("bouton désactivé sans données", pg.is_disabled("#cpts-toggle"))
+            ok("libellé d'indisponibilité",
+               "indisponible" in pg.inner_text("#cpts-toggle"))
             ok("consigne de dépôt du fichier",
                "cpts.geojson" in pg.inner_text("#cpts-note"))
             ok("case restriction inactive", pg.is_disabled("#l-restr"))
         else:
             cpts = json.load(open(os.path.join(RACINE, "cpts.geojson"), encoding="utf-8"))
             noms = [f["properties"]["nom"] for f in cpts["features"]]
-            ok("menu peuplé : 2 entrées globales + %d CPTS" % len(noms),
-               opts.count() == len(noms) + 2, opts.count())
             ok("compteur CPTS", pg.inner_text("#c-cpts") == str(len(noms)))
+            ok("toutes cochées par défaut",
+               pg.inner_text("#cpts-toggle") == "Toutes les CPTS (%d)" % len(noms),
+               pg.inner_text("#cpts-toggle"))
+            ok("panneau replié au départ", not pg.is_visible("#cpts-menu"))
+
+            pg.click("#cpts-toggle")
+            pg.wait_for_timeout(250)
+            ok("le bouton déplie le panneau", pg.is_visible("#cpts-menu"))
+            ok("une case par CPTS",
+               pg.locator("#cpts-list input").count() == len(noms))
             ok("regroupement par département",
-               pg.locator("#cpts-select optgroup").count() >= 5,
-               pg.locator("#cpts-select optgroup").count())
-            ok("valeur par défaut = toutes", pg.input_value("#cpts-select") == "*")
+               pg.locator("#cpts-list .grp").count() >= 5,
+               pg.locator("#cpts-list .grp").count())
+            ok("toutes les cases sont cochées",
+               pg.locator("#cpts-list input:checked").count() == len(noms))
 
             n_toutes = pg.evaluate(
                 "document.querySelectorAll('path.leaflet-interactive').length")
 
-            # Sélection d'une CPTS marseillaise (celle qui a des arrondissements).
-            idx = next(i for i, f in enumerate(cpts["features"])
-                       if f["properties"].get("arrondissements"))
-            pg.select_option("#cpts-select", str(idx))
-            pg.wait_for_timeout(700)
-            ok("fiche CPTS affichée", pg.is_visible("#cpts-fiche"))
-            fiche = pg.inner_text("#cpts-fiche")
-            ok("fiche : nom de la CPTS", noms[idx] in fiche, fiche[:60])
-            ok("fiche : arrondissements en clair",
-               "1er" in fiche or "e" in fiche, fiche)
-            ok("case restriction activée", not pg.is_disabled("#l-restr"))
+            # --- sélection multiple : c'est le cœur du changement.
+            ouvrir_cpts(pg)
+            pg.click('[data-cpts-all="0"]')
+            pg.wait_for_timeout(400)
+            ok("« Aucune » vide la sélection",
+               pg.inner_text("#cpts-toggle") == "Aucune CPTS affichée",
+               pg.inner_text("#cpts-toggle"))
+            n_zero = pg.evaluate(
+                "document.querySelectorAll('path.leaflet-interactive').length")
+            ok("plus aucun tracé de CPTS", n_zero < n_toutes)
 
+            idx_arr = next(i for i, f in enumerate(cpts["features"])
+                           if f["properties"].get("arrondissements"))
+            idx_sans = [i for i, f in enumerate(cpts["features"])
+                        if not f["properties"].get("arrondissements")]
+            a, b_, c_ = idx_sans[0], idx_sans[1], idx_sans[2]
+
+            ouvrir_cpts(pg)
+            pg.check('#cpts-list input[value="%d"]' % a)
+            pg.wait_for_timeout(350)
+            ok("une seule cochée : le bouton affiche son nom",
+               pg.inner_text("#cpts-toggle") == noms[a], pg.inner_text("#cpts-toggle"))
+            ok("fiche affichée pour une CPTS unique", pg.is_visible("#cpts-fiche"))
+            ok("fiche : bon nom", noms[a] in pg.inner_text("#cpts-fiche"))
             n_une = pg.evaluate(
                 "document.querySelectorAll('path.leaflet-interactive').length")
-            ok("moins de tracés qu'en mode « toutes »", n_une < n_toutes,
-               "%d vs %d" % (n_une, n_toutes))
 
-            # Une CPTS sans arrondissement ne doit pas traîner les 16 contours.
-            idx2 = next(i for i, f in enumerate(cpts["features"])
-                        if not f["properties"].get("arrondissements"))
-            pg.select_option("#cpts-select", str(idx2))
-            pg.wait_for_timeout(600)
-            n_sans_arr = pg.evaluate(
+            ouvrir_cpts(pg)
+            pg.check('#cpts-list input[value="%d"]' % b_)
+            ouvrir_cpts(pg)
+            pg.check('#cpts-list input[value="%d"]' % c_)
+            pg.wait_for_timeout(400)
+            ok("trois cochées : le bouton compte",
+               pg.inner_text("#cpts-toggle") == "3 CPTS sélectionnées",
+               pg.inner_text("#cpts-toggle"))
+            ok("fiche masquée au-delà d'une CPTS", not pg.is_visible("#cpts-fiche"))
+            n_trois = pg.evaluate(
                 "document.querySelectorAll('path.leaflet-interactive').length")
-            ok("arrondissements masqués hors Marseille", n_sans_arr < n_une,
-               "%d vs %d" % (n_sans_arr, n_une))
+            ok("trois CPTS tracées, pas une", n_trois == n_une + 2,
+               "%d vs %d" % (n_trois, n_une + 2))
 
-            # Restriction de la sélection au périmètre de la CPTS.
-            codes = cpts["features"][idx2]["properties"]["communes"]
+            # Décocher n'affecte que la CPTS visée.
+            ouvrir_cpts(pg)
+            pg.uncheck('#cpts-list input[value="%d"]' % b_)
+            pg.wait_for_timeout(350)
+            ok("décocher retire une seule CPTS",
+               pg.inner_text("#cpts-toggle") == "2 CPTS sélectionnées")
+            ok("les deux autres restent cochées",
+               pg.is_checked('#cpts-list input[value="%d"]' % a)
+               and pg.is_checked('#cpts-list input[value="%d"]' % c_))
+
+            # Arrondissements : visibles seulement si une CPTS marseillaise
+            # figure dans la sélection.
+            n_hors = pg.evaluate(
+                "document.querySelectorAll('path.leaflet-interactive').length")
+            ouvrir_cpts(pg)
+            pg.check('#cpts-list input[value="%d"]' % idx_arr)
+            pg.wait_for_timeout(450)
+            n_avec = pg.evaluate(
+                "document.querySelectorAll('path.leaflet-interactive').length")
+            ok("arrondissements ajoutés avec une CPTS marseillaise",
+               n_avec - n_hors > 16, "%d vs %d" % (n_avec, n_hors))
+            ouvrir_cpts(pg)
+            pg.uncheck('#cpts-list input[value="%d"]' % idx_arr)
+            pg.wait_for_timeout(350)
+
+            # --- filtre de recherche
+            pg.fill("#cpts-q", "marseille")
+            pg.wait_for_timeout(300)
+            vis = pg.locator("#cpts-list label:not([hidden])").count()
+            ok("le filtre réduit la liste", 0 < vis < len(noms), vis)
+            ok("les cases cochées ne bougent pas au filtrage",
+               pg.inner_text("#cpts-toggle") == "2 CPTS sélectionnées")
+            ok("compteur « n sur total » affiché",
+               "sur %d" % len(noms) in pg.inner_text("#cpts-vus"),
+               pg.inner_text("#cpts-vus"))
+
+            # « Toutes » n'agit que sur les lignes visibles.
+            ouvrir_cpts(pg)
+            pg.click('[data-cpts-all="1"]')
+            pg.wait_for_timeout(400)
+            n_sel = pg.locator("#cpts-list input:checked").count()
+            ok("« Toutes » se limite au filtre courant", n_sel < len(noms), n_sel)
+
+            pg.fill("#cpts-q", "zzzz")
+            pg.wait_for_timeout(300)
+            ok("message quand le filtre ne renvoie rien",
+               pg.is_visible("#cpts-list .vide"))
+            pg.fill("#cpts-q", "")
+            pg.wait_for_timeout(300)
+            ok("vider le filtre réaffiche tout",
+               pg.locator("#cpts-list label:not([hidden])").count() == len(noms))
+
+            # --- restriction de la sélection au périmètre cumulé
+            ouvrir_cpts(pg)
+            pg.click('[data-cpts-all="0"]')
+            pg.wait_for_timeout(300)
+            ok("restriction inactive sans CPTS", pg.is_disabled("#l-restr"))
+            ouvrir_cpts(pg)
+            pg.check('#cpts-list input[value="%d"]' % a)
+            ouvrir_cpts(pg)
+            pg.check('#cpts-list input[value="%d"]' % b_)
+            pg.wait_for_timeout(400)
+            ok("restriction activable dès une sélection partielle",
+               not pg.is_disabled("#l-restr"))
             pg.check("#l-non")
             pg.check("#l-restr")
             pg.wait_for_timeout(600)
-            ok("stat « communes affichées » = périmètre CPTS",
-               nombre(pg.inner_text("#s-tot")) == len(codes),
-               "%s vs %d" % (pg.inner_text("#s-tot"), len(codes)))
+            union = set(cpts["features"][a]["properties"]["communes"]) | \
+                    set(cpts["features"][b_]["properties"]["communes"])
+            ok("le périmètre est l'union des CPTS cochées",
+               nombre(pg.inner_text("#s-tot")) == len(union),
+               "%s vs %d" % (pg.inner_text("#s-tot"), len(union)))
             if not sans_qpv:
-                zc = distincts(codes, "ZIP")
-                ok("QPV ZIP recalculés sur le périmètre CPTS",
+                zc = distincts(list(union), "ZIP")
+                ok("QPV ZIP recalculés sur l'union",
                    nombre(pg.inner_text("#s-qzip")) == zc,
                    "%s vs %d" % (pg.inner_text("#s-qzip"), zc))
+
+            # Ajouter une CPTS élargit le périmètre sans le recalculer à tort.
+            ouvrir_cpts(pg)
+            pg.check('#cpts-list input[value="%d"]' % c_)
+            pg.wait_for_timeout(500)
+            union3 = union | set(cpts["features"][c_]["properties"]["communes"])
+            ok("le périmètre suit l'ajout d'une CPTS",
+               nombre(pg.inner_text("#s-tot")) == len(union3),
+               "%s vs %d" % (pg.inner_text("#s-tot"), len(union3)))
 
             # La recherche doit lever la restriction si la commune est dehors.
             dehors = next(f["properties"]["c"] for f in
                           json.load(open(os.path.join(RACINE, "communes-paca.geojson"),
                                          encoding="utf-8"))["features"]
-                          if f["properties"]["c"] not in codes)
+                          if f["properties"]["c"] not in union3)
             pg.fill("#q", dehors)
             pg.dispatch_event("#q", "change")
             pg.wait_for_timeout(800)
@@ -248,23 +357,31 @@ def main(sans_qpv=False, sans_cpts=False, sans_contours=False):
                pg.locator(".leaflet-popup-content").count() == 1)
             pg.keyboard.press("Escape")
 
-            # Retour à « masquer ».
-            pg.select_option("#cpts-select", "")
-            pg.wait_for_timeout(500)
-            ok("fiche masquée", not pg.is_visible("#cpts-fiche"))
-            ok("restriction remise à zéro", not pg.is_checked("#l-restr")
-               and pg.is_disabled("#l-restr"))
-
-            # Un département décoché doit se rouvrir si on y choisit une CPTS.
+            # Un département décoché doit se rouvrir si on y coche une CPTS.
+            ouvrir_cpts(pg)
+            pg.click('[data-cpts-all="0"]')
+            pg.wait_for_timeout(300)
             pg.click('[data-all="0"]')
-            pg.wait_for_timeout(200)
-            pg.select_option("#cpts-select", str(idx2))
-            pg.wait_for_timeout(600)
-            dep = cpts["features"][idx2]["properties"]["communes"][0][:2]
+            pg.wait_for_timeout(250)
+            ouvrir_cpts(pg)
+            pg.check('#cpts-list input[value="%d"]' % c_)
+            pg.wait_for_timeout(500)
+            dep = cpts["features"][c_]["properties"]["communes"][0][:2]
             ok("département rouvert automatiquement",
                pg.is_checked('#depts input[value="%s"]' % dep))
+
             pg.click('[data-all="1"]')
+            ouvrir_cpts(pg)
+            pg.click('[data-cpts-all="1"]')
+            pg.wait_for_timeout(400)
+            ok("retour à toutes les CPTS",
+               pg.inner_text("#cpts-toggle") == "Toutes les CPTS (%d)" % len(noms))
+
+            # Le panneau se referme au clic extérieur.
+            pg.click("#map", position={"x": 400, "y": 300})
             pg.wait_for_timeout(300)
+            ok("clic hors du panneau : menu replié", not pg.is_visible("#cpts-menu"))
+            pg.keyboard.press("Escape")
 
         # ---------------------------------------------------------- croisement
         pg.click("#cross")
