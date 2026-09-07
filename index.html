@@ -13,7 +13,7 @@
   --ink-1:#0b0b0b; --ink-2:#52514e; --ink-3:#898781;
   --line:#e1e0d9; --ring:rgba(11,11,11,.10);
   --zip:#eb6834; --zb:#4a3aa7; --cpts:#2a78d6; --both:#7a1020; --neutral:#b9bfca;
-  --accent:#2a78d6;
+  --zac:#1f8a70; --accent:#2a78d6;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -21,7 +21,7 @@
     --surface-1:#1a1a19; --plane:#0d0d0d; --panel:#1a1a19;
     --ink-1:#ffffff; --ink-2:#c3c2b7; --ink-3:#898781;
     --line:#2c2c2a; --ring:rgba(255,255,255,.12);
-    --accent:#3987e5;
+    --zac:#2fa98a; --accent:#3987e5;
   }
 }
 *{box-sizing:border-box}
@@ -41,13 +41,29 @@ body{
 #panel .sub{font-size:12px;color:var(--ink-3);margin:0 0 18px}
 .sec{border-top:1px solid var(--line);padding-top:14px;margin-top:16px}
 .sec:first-of-type{border-top:0;margin-top:0;padding-top:0}
-.sec h2{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);margin:0 0 10px;font-weight:600}
+.sec h2{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);margin:0 0 10px;font-weight:600;display:flex;align-items:center}
+.sec h2 .cnt{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:500;font-variant-numeric:tabular-nums}
 /* compteurs */
 #stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .stat{background:var(--surface-1);border:1px solid var(--ring);border-radius:8px;padding:9px 10px}
 .stat .v{font-size:21px;font-weight:650;letter-spacing:-.02em;line-height:1.1}
 .stat .k{font-size:10.5px;color:var(--ink-2);margin-top:2px;line-height:1.25}
 .stat.zip .v{color:var(--zip)} .stat.zb .v{color:var(--zb)} .stat.both .v{color:var(--both)}
+.stat.qzip .v{color:var(--zip)} .stat.qzac .v{color:var(--zac)}
+.stat.off{opacity:.45}
+/* fiche de la CPTS choisie dans le menu déroulant */
+#cpts-fiche{margin-top:9px;background:var(--surface-1);border:1px solid var(--ring);
+  border-radius:8px;padding:10px 11px}
+#cpts-fiche[hidden]{display:none}
+#cpts-fiche .nom{font-size:13px;font-weight:650;line-height:1.3;margin-bottom:6px}
+#cpts-fiche dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:11.5px}
+#cpts-fiche dt{color:var(--ink-3)}
+#cpts-fiche dd{margin:0;font-weight:550;overflow-wrap:anywhere}
+#cpts-fiche a{color:var(--accent)}
+/* liste des QPV dans le popup d'une commune */
+.qpvlist{margin:8px 0 0;padding:0;list-style:none;font-size:12px;line-height:1.45}
+.qpvlist li{display:flex;gap:7px;align-items:baseline;padding:1.5px 0}
+.qpvlist .pill{flex:0 0 auto;min-width:32px;text-align:center}
 /* contrôles */
 label.row{display:flex;align-items:center;gap:9px;padding:5px 0;cursor:pointer;font-size:13px}
 label.row input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex:0 0 auto;margin:0}
@@ -124,6 +140,8 @@ footer b{color:var(--ink-2);font-weight:600}
       <div class="stat zip"><div class="v" id="s-zip">-</div><div class="k">en ZIP</div></div>
       <div class="stat zb"><div class="v" id="s-zb">-</div><div class="k">touchées zone blanche</div></div>
       <div class="stat both"><div class="v" id="s-both">-</div><div class="k">ZIP <i>et</i> zone blanche</div></div>
+      <div class="stat qzip" id="w-qzip"><div class="v" id="s-qzip">-</div><div class="k">QPV en ZIP</div></div>
+      <div class="stat qzac" id="w-qzac"><div class="v" id="s-qzac">-</div><div class="k">QPV en ZAC</div></div>
     </div>
   </div>
 
@@ -138,7 +156,18 @@ footer b{color:var(--ink-2);font-weight:600}
     <label class="row"><input type="checkbox" id="l-zip" checked><span class="swatch" style="background:var(--zip)"></span>Communes ZIP<span class="cnt" id="c-zip"></span></label>
     <label class="row"><input type="checkbox" id="l-non"><span class="swatch" style="background:var(--neutral)"></span>Communes hors ZIP<span class="cnt" id="c-non"></span></label>
     <label class="row" id="w-zb"><input type="checkbox" id="l-zb" checked><span class="swatch" style="background:var(--zb)"></span>Zones blanches 4G<span class="cnt" id="c-zb"></span></label>
-    <label class="row" id="w-cpts"><input type="checkbox" id="l-cpts"><span class="swatch" style="background:var(--cpts)"></span>CPTS<span class="cnt" id="c-cpts"></span></label>
+    <label class="row" id="w-qpv"><input type="checkbox" id="l-qpv" checked><span class="swatch" style="background:linear-gradient(90deg,var(--zip) 50%,var(--zac) 50%)"></span>Quartiers prioritaires<span class="cnt" id="c-qpv"></span></label>
+    <p class="note" id="qpv-note"></p>
+  </div>
+
+  <div class="sec" id="sec-cpts">
+    <h2><span class="swatch" style="background:var(--cpts);display:inline-block;vertical-align:-1px;margin-right:6px"></span>CPTS<span class="cnt" id="c-cpts"></span></h2>
+    <select id="cpts-select" aria-label="Afficher les CPTS">
+      <option value="">Chargement…</option>
+    </select>
+    <div id="cpts-fiche" hidden></div>
+    <label class="row off" id="w-restr" style="margin-top:4px">
+      <input type="checkbox" id="l-restr" disabled>Restreindre la sélection à cette CPTS</label>
     <p class="note" id="cpts-note"></p>
   </div>
 
@@ -158,7 +187,7 @@ footer b{color:var(--ink-2);font-weight:600}
   <div class="sec">
     <h2>Fond de plan</h2>
     <select id="base">
-      <option value="light">Clair (CartoDB Positron)</option>
+      <option value="light">Clair (Esri Light Gray)</option>
       <option value="topo">Relief (OpenTopoMap)</option>
       <option value="sat">Satellite (Esri)</option>
     </select>
@@ -166,10 +195,15 @@ footer b{color:var(--ink-2);font-weight:600}
 
   <footer>
     <b>Sources :</b> Zonage conventionnel MG : CartoSanté / ARS (extraction fournie, 403 communes ZIP).
+    Zonage QPV : arrêté ARS PACA de zonage QPV médecins, zonage 2025 (fichier de février 2026).
     Zones blanches : ARCEP, <i>4G data, T3 2024</i>, intersection des 4 opérateurs.
-    CPTS : ARS PACA / DSDP, janvier 2026. Contours communaux : IGN via france-geojson.<br><br>
+    CPTS : ARS PACA / DSDP, janvier 2026. Contours communaux : IGN via france-geojson.
+    Contours des QPV : ANCT, <i>Quartiers prioritaires 2024</i>, via data.gouv.fr.<br><br>
     <b>Lecture :</b> une commune est marquée "zone blanche" dès qu'une partie de son territoire
-    est concernée, sans pondération par population. L'indicateur surestime l'exposition réelle.
+    est concernée, sans pondération par population. L'indicateur surestime l'exposition réelle.<br><br>
+    Le zonage QPV est prononcé quartier par quartier et ne se déduit pas du zonage communal :
+    une commune hors ZIP peut abriter un QPV classé ZIP, et une commune ZIP des QPV classés ZAC
+    (zone d'action complémentaire). Les deux couches se lisent séparément.
   </footer>
 </div>
 
@@ -199,8 +233,13 @@ var css = function(n){ return getComputedStyle(document.documentElement).getProp
 /* ---------- carte ---------- */
 var map = L.map("map",{ zoomControl:true, preferCanvas:true }).setView([43.85,6.1], 8);
 var bases = {
-  light: L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-    {maxZoom:19, attribution:'&copy; OpenStreetMap, &copy; CARTO'}),
+  // CARTO tamponne « API KEY REQUIRED » sur les tuiles Positron servies sans
+  // clé. Le canevas gris d'Esri donne un rendu équivalent et ne demande rien ;
+  // il vient du même fournisseur que la couche satellite ci-dessous.
+  // maxNativeZoom : Esri s'arrête à z16, Leaflet agrandit les tuiles au-delà
+  // au lieu d'afficher du vide.
+  light: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    {maxZoom:19, maxNativeZoom:16, attribution:'Esri, HERE, Garmin, &copy; OpenStreetMap contributors'}),
   topo: L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
     {maxZoom:17, attribution:'&copy; OpenStreetMap, SRTM, OpenTopoMap (CC-BY-SA)'}),
   sat: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
@@ -214,16 +253,24 @@ document.getElementById("base").addEventListener("change", function(e){
 var svgRenderer = L.svg({padding:0.4});
 var gCommunes = L.layerGroup().addTo(map);
 var gZB       = L.layerGroup().addTo(map);
+// Les QPV sont de petits polygones posés à l'intérieur des communes : ils
+// doivent passer au-dessus des aplats communaux, sinon ils disparaissent
+// sous le remplissage. Sous les CPTS, dont le trait sert de repère.
+var gQPV      = L.layerGroup().addTo(map);
 var gCPTS     = L.layerGroup().addTo(map);
 
 /* ---------- état ---------- */
+// state.cpts remplace l'ancien booléen : "" = couche masquée, "*" = toutes,
+// sinon l'indice de la CPTS choisie dans cptsLayers.
 var state = {
   depts: new Set(DEPT_ORDER),
-  zip:true, non:false, zb:true, cpts:false, cross:false
+  zip:true, non:false, zb:true, qpv:true, cpts:"", restr:false, cross:false
 };
 var communes = [];      // {p:props, layer:L.Path}
 var byCode   = {};
-var zbLoaded = false, cptsLoaded = false;
+var qpvLayers = [];     // {p:props, layer:L.Path} — contours des quartiers
+var zbLoaded = false, cptsLoaded = false, qpvLoaded = false, contoursLoaded = false;
+var qpvMeta  = null;
 
 /* ---------- styles ---------- */
 function styleCommune(p){
@@ -232,10 +279,23 @@ function styleCommune(p){
   if (p.z===1)  return {color:css("--zip"),  weight:1,   opacity:.9,  fillColor:css("--zip"),  fillOpacity:.55};
   return             {color:css("--neutral"),weight:.6,  opacity:.65, fillColor:css("--neutral"),fillOpacity:.16};
 }
+function styleQPV(p){
+  // Trait franc et remplissage soutenu : un QPV fait quelques hectares face à
+  // des communes de plusieurs dizaines de km², il doit rester repérable au
+  // zoom régional sans être confondu avec l'aplat communal en dessous.
+  var c = p.z === "ZIP" ? css("--zip") : css("--zac");
+  return {color:c, weight:1.6, opacity:1, fillColor:c, fillOpacity:.72};
+}
 // Contour seul : à Marseille, huit CPTS se superposent sur le même polygone
 // communal, et huit remplissages empilés donnent une tache opaque qui ne veut
 // rien dire. Le fill reste présent (opacité quasi nulle) pour rester cliquable.
-function styleCPTS(){ return {color:css("--cpts"), weight:1.6, opacity:.7, fillColor:css("--cpts"), fillOpacity:.03}; }
+// `focus` : une seule CPTS est demandée. Plus rien ne se superpose, on peut
+// donc épaissir le trait et poser un remplissage lisible.
+function styleCPTS(focus){
+  return focus
+    ? {color:css("--cpts"), weight:2.8, opacity:.95, fillColor:css("--cpts"), fillOpacity:.12}
+    : {color:css("--cpts"), weight:1.6, opacity:.7,  fillColor:css("--cpts"), fillOpacity:.03};
+}
 
 /* ---------- popup / survol ---------- */
 function pill(c,t){ return '<span class="pill" style="background:'+c+'">'+t+'</span>'; }
@@ -243,14 +303,31 @@ function numArr(code){ var n=parseInt(String(code).slice(-2),10); return n===1?"
 function esc(s){ return String(s).replace(/[&<>"]/g, function(c){
   return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
 function popupHTML(p){
-  var h = '<h3>'+p.n+'</h3><div class="code">'+p.c+', '+(DEPTS[p.d]||p.d)+'</div><dl>';
+  var nq = (p.qpv || []).length;
+  var h = '<h3>'+esc(p.n)+'</h3><div class="code">'+p.c+', '+(DEPTS[p.d]||p.d)+'</div><dl>';
   h += '<dt>Zonage MG</dt><dd>'+(p.z===1 ? pill(css("--zip"),"ZIP") : '<span style="color:var(--ink-3)">hors ZIP</span>')+'</dd>';
-  if (p.z===1 && p.q>0) h += '<dt>QPV en ZIP</dt><dd>'+p.q+'</dd>';
+  // Le zonage QPV est prononcé quartier par quartier : une commune hors ZIP
+  // peut abriter un QPV en ZIP, et l'inverse est fréquent (Nice, Aix, Toulon).
+  // On l'affiche donc sans le conditionner au zonage communal.
+  if (qpvLoaded && nq){
+    var tags = [];
+    if (p.q > 0)    tags.push(pill(css("--zip"), p.q+" ZIP"));
+    if (p.qzac > 0) tags.push(pill(css("--zac"), p.qzac+" ZAC"));
+    h += '<dt>QPV ('+nq+')</dt><dd>'+tags.join(" ")+'</dd>';
+  }
   h += '<dt>Zone blanche 4G</dt><dd>'+(!zbLoaded ? '<span style="color:var(--ink-3)">n. d.</span>'
         : p.b===1 ? pill(css("--zb"),"concernée") : '<span style="color:var(--ink-3)">non</span>')+'</dd>';
   if (cptsLoaded) h += '<dt>CPTS'+(p.ncpts>1 ? " ("+p.ncpts+")" : "")+'</dt><dd>'+
-      (p.cpts || '<span style="color:var(--ink-3);font-weight:400">aucune</span>')+'</dd>';
+      (p.cpts ? esc(p.cpts) : '<span style="color:var(--ink-3);font-weight:400">aucune</span>')+'</dd>';
   h += '</dl>';
+  if (qpvLoaded && nq){
+    h += '<ul class="qpvlist">';
+    p.qpv.forEach(function(q){
+      h += '<li>'+pill(q.z === "ZIP" ? css("--zip") : css("--zac"), q.z)+
+           '<span>'+esc(q.n)+'</span></li>';
+    });
+    h += '</ul>';
+  }
   if (p.z===1 && p.b===1) h += '<p style="margin:10px 0 0;font-size:12px;color:'+css("--both")+';font-weight:600">⚠ Cumul sous-densité médicale + zone blanche</p>';
   return h;
 }
@@ -259,18 +336,32 @@ function showHover(p){
   var t = "<b>"+p.n+"</b> <span style='color:var(--ink-3)'>"+p.c+"</span>";
   if (p.z===1) t += '<span class="tag" style="background:'+css("--zip")+'">ZIP</span>';
   if (p.b===1) t += '<span class="tag" style="background:'+css("--zb")+'">zone blanche</span>';
+  if (p.q > 0)    t += '<span class="tag" style="background:'+css("--zip")+'">'+p.q+' QPV ZIP</span>';
+  if (p.qzac > 0) t += '<span class="tag" style="background:'+css("--zac")+'">'+p.qzac+' QPV ZAC</span>';
   hb.innerHTML = t; hb.classList.add("on");
 }
 
 /* ---------- rendu ---------- */
+// CPTS actuellement mise en avant, ou null si « toutes » / couche masquée.
+function cptsChoisie(){
+  return (cptsLoaded && state.cpts !== "" && state.cpts !== "*")
+    ? cptsLayers[+state.cpts] : null;
+}
 function visible(p){
   if (!state.depts.has(p.d)) return false;
+  var sel = cptsChoisie();
+  if (state.restr && sel && !sel.codes[p.c]) return false;
   if (state.cross) return p.z===1 && p.b===1;
   return p.z===1 ? state.zip : state.non;
 }
 function render(){
   gCommunes.clearLayers();
-  var n=0, nz=0, nb=0, nboth=0, bounds=null;
+  var n=0, nz=0, nb=0, nboth=0;
+  // Quatre QPV de la région sont à cheval sur deux ou trois communes (Ranguin
+  // entre Cannes et Le Cannet, Ariane sur trois communes niçoises…). Sommer
+  // les compteurs communaux les compterait autant de fois : on dédoublonne
+  // sur l'identifiant du QPV.
+  var vusZip = {}, vusZac = {};
   for (var i=0;i<communes.length;i++){
     var c = communes[i];
     if (!visible(c.p)) continue;
@@ -278,20 +369,49 @@ function render(){
     if (c.p.z===1) nz++;
     if (c.p.b===1) nb++;
     if (c.p.z===1 && c.p.b===1) nboth++;
+    (c.p.qpv || []).forEach(function(q){
+      (q.z === "ZIP" ? vusZip : vusZac)[q.id || q.n] = 1;
+    });
   }
+  var nqz = Object.keys(vusZip).length, nqa = Object.keys(vusZac).length;
   document.getElementById("s-tot").textContent  = n.toLocaleString("fr-FR");
   document.getElementById("s-zip").textContent  = nz.toLocaleString("fr-FR");
   document.getElementById("s-zb").textContent   = zbLoaded ? nb.toLocaleString("fr-FR") : "-";
   document.getElementById("s-both").textContent = zbLoaded ? nboth.toLocaleString("fr-FR") : "-";
+  document.getElementById("s-qzip").textContent = qpvLoaded ? nqz.toLocaleString("fr-FR") : "-";
+  document.getElementById("s-qzac").textContent = qpvLoaded ? nqa.toLocaleString("fr-FR") : "-";
 
   gZB.clearLayers();
   if (state.zb && zbLoaded && !state.cross) zbLayers.forEach(function(o){
     if (state.depts.has(o.d)) gZB.addLayer(o.layer);
   });
+
+  // Les QPV suivent les mêmes filtres que les communes : département coché,
+  // et périmètre CPTS si la restriction est active. En mode croisement, la
+  // carte se concentre sur ZIP × zone blanche : les quartiers brouilleraient
+  // la lecture.
+  gQPV.clearLayers();
+  if (state.qpv && contoursLoaded && !state.cross){
+    var selq = cptsChoisie();
+    qpvLayers.forEach(function(o){
+      if (!state.depts.has(o.p.d)) return;
+      if (state.restr && selq && !o.p.com.some(function(c){ return selq.codes[c]; })) return;
+      gQPV.addLayer(o.layer);
+    });
+  }
+
   gCPTS.clearLayers();
-  if (state.cpts && cptsLoaded) {
-    arrLayers.forEach(function(o){ gCPTS.addLayer(o.layer); });
-    cptsLayers.forEach(function(o){ gCPTS.addLayer(o.layer); });
+  if (cptsLoaded && state.cpts !== "") {
+    var sel = cptsChoisie();
+    // Les arrondissements ne servent de repère que si Marseille est à l'écran :
+    // seize contours pointillés autour d'une CPTS varoise ne renseignent rien.
+    if (!sel || (sel.p.arrondissements || []).length)
+      arrLayers.forEach(function(o){ gCPTS.addLayer(o.layer); });
+    cptsLayers.forEach(function(o){
+      if (sel && o !== sel) return;
+      o.layer.setStyle(styleCPTS(!!sel));
+      gCPTS.addLayer(o.layer);
+    });
   }
 }
 function fitToDepts(){
@@ -322,10 +442,104 @@ document.querySelectorAll("[data-all]").forEach(function(b){
     render(); if (on) fitToDepts();
   });
 });
-[["l-zip","zip"],["l-non","non"],["l-zb","zb"],["l-cpts","cpts"]].forEach(function(pair){
+[["l-zip","zip"],["l-non","non"],["l-zb","zb"],["l-qpv","qpv"]].forEach(function(pair){
   document.getElementById(pair[0]).addEventListener("change", function(e){
     state[pair[1]] = e.target.checked; render();
   });
+});
+
+/* ---------- menu déroulant CPTS ---------- */
+var cptsSelect = document.getElementById("cpts-select"),
+    cptsFiche  = document.getElementById("cpts-fiche"),
+    restrBox   = document.getElementById("l-restr"),
+    restrRow   = document.getElementById("w-restr");
+cptsSelect.disabled = true;
+
+function remplirMenuCPTS(){
+  // Regroupement par département : soixante-dix entrées à plat ne se
+  // parcourent pas. Les CPTS interdépartementales sont classées dans leur
+  // département dominant, et la fiche cite les autres.
+  var parDep = {};
+  cptsLayers.forEach(function(o, i){
+    (parDep[o.dep] = parDep[o.dep] || []).push({i:i, nom:o.p.nom || "CPTS"});
+  });
+  var h = '<option value="">Masquer la couche</option>' +
+          '<option value="*">Toutes les CPTS (' + cptsLayers.length + ')</option>';
+  DEPT_ORDER.concat(Object.keys(parDep).filter(function(d){
+    return DEPT_ORDER.indexOf(d) < 0;
+  })).forEach(function(d){
+    var l = parDep[d];
+    if (!l) return;
+    l.sort(function(a, b){ return a.nom.localeCompare(b.nom, "fr"); });
+    h += '<optgroup label="' + esc(d + " — " + (DEPTS[d] || d)) + '">';
+    l.forEach(function(x){ h += '<option value="' + x.i + '">' + esc(x.nom) + '</option>'; });
+    h += '</optgroup>';
+  });
+  cptsSelect.innerHTML = h;
+  cptsSelect.disabled = false;
+  cptsSelect.value = state.cpts;
+}
+
+function ficheCPTS(o){
+  var p = o.p, nArr = (p.arrondissements || []).length,
+      nCom = (p.communes || []).length;
+  var h = '<div class="nom">' + esc(p.nom || "CPTS") + '</div><dl>';
+  h += '<dt>Statut</dt><dd>' + (CPTS_STATUTS[p.statut] || p.statut ||
+       '<span style="color:var(--ink-3);font-weight:400">n. d.</span>') + '</dd>';
+  // Même règle que le popup : à Marseille, l'unité qui a du sens est
+  // l'arrondissement, pas la commune.
+  if (nArr) h += '<dt>Arrondissements</dt><dd>' + esc(p.arrondissements.map(numArr).join(", ")) +
+       ' <span style="font-weight:400;color:var(--ink-3)">de Marseille</span></dd>';
+  if (nArr && nCom > 1) h += '<dt>Communes</dt><dd>' + (nCom - 1) + ' + Marseille</dd>';
+  else if (!nArr)       h += '<dt>Communes</dt><dd>' + nCom + '</dd>';
+  h += '<dt>Département' + (o.deps.length > 1 ? "s" : "") + '</dt><dd>' + o.deps.join(", ") + '</dd>';
+  if (p.president)     h += '<dt>Présidence</dt><dd>' + esc(p.president) + '</dd>';
+  if (p.coordonnateur) h += '<dt>Coordination</dt><dd>' + esc(p.coordonnateur) + '</dd>';
+  if (p.contact) h += '<dt>Contact</dt><dd><a href="mailto:' + encodeURIComponent(p.contact) +
+       '">' + esc(p.contact) + '</a></dd>';
+  if (p.site) h += '<dt>Site</dt><dd><a href="' +
+       (/^https?:/.test(p.site) ? esc(p.site) : "https://" + esc(p.site)) +
+       '" target="_blank" rel="noopener">' + esc(p.site) + '</a></dd>';
+  return h + '</dl>';
+}
+
+function cadrerCPTS(){
+  var sel = cptsChoisie();
+  if (!sel) return;
+  try { map.fitBounds(sel.layer.getBounds(), {padding:[30,30], maxZoom:13}); }
+  catch (e) { /* géométrie dégénérée : on laisse la vue en place */ }
+}
+
+cptsSelect.addEventListener("change", function(){
+  state.cpts = cptsSelect.value;
+  var sel = cptsChoisie();
+  restrBox.disabled = !sel;
+  restrRow.classList.toggle("off", !sel);
+  if (!sel) restrBox.checked = false;
+  state.restr = restrBox.checked && !!sel;
+  if (sel){
+    cptsFiche.innerHTML = ficheCPTS(sel);
+    cptsFiche.hidden = false;
+    // Une CPTS dont le département est décoché ne s'afficherait pas : choisir
+    // une CPTS vaut demande de la voir, on rouvre les départements qu'il faut.
+    sel.deps.forEach(function(d){
+      if (state.depts.has(d)) return;
+      state.depts.add(d);
+      var i = dbox.querySelector('input[value="' + d + '"]');
+      if (i) i.checked = true;
+    });
+  } else {
+    cptsFiche.hidden = true;
+    cptsFiche.innerHTML = "";
+  }
+  render();
+  cadrerCPTS();
+});
+
+restrBox.addEventListener("change", function(){
+  state.restr = restrBox.checked && !!cptsChoisie();
+  render();
+  if (state.restr) cadrerCPTS();
 });
 var crossBtn = document.getElementById("cross");
 crossBtn.disabled = true;
@@ -353,16 +567,26 @@ document.getElementById("q").addEventListener("change", function(e){
     dbox.querySelector('input[value="'+c.p.d+'"]').checked = true;
   }
   if (c.p.z===0) { state.non = true; document.getElementById("l-non").checked = true; }
+  // Une commune hors du périmètre de la CPTS choisie resterait masquée : la
+  // recherche est une demande explicite, elle l'emporte sur la restriction.
+  var selc = cptsChoisie();
+  if (state.restr && selc && !selc.codes[c.p.c]){
+    restrBox.checked = false; state.restr = false;
+  }
   if (state.cross) crossBtn.click();
   render();
   map.fitBounds(c.layer.getBounds(), {maxZoom:12, padding:[40,40]});
   c.layer.openPopup();
 });
 document.getElementById("csv").addEventListener("click", function(){
-  var rows = [["code_insee","commune","departement","zip","qpv_zip","zone_blanche_4g"]];
+  var rows = [["code_insee","commune","departement","zip","qpv_zip","qpv_zac",
+               "zone_blanche_4g","cpts"]];
   communes.forEach(function(c){
     if (!visible(c.p)) return;
-    rows.push([c.p.c, '"'+c.p.n.replace(/"/g,'""')+'"', c.p.d, c.p.z, c.p.q, zbLoaded ? c.p.b : ""]);
+    rows.push([c.p.c, '"'+c.p.n.replace(/"/g,'""')+'"', c.p.d, c.p.z,
+               qpvLoaded ? (c.p.q||0) : "", qpvLoaded ? (c.p.qzac||0) : "",
+               zbLoaded ? c.p.b : "",
+               cptsLoaded ? '"'+String(c.p.cpts||"").replace(/"/g,'""')+'"' : ""]);
   });
   var blob = new Blob(["﻿"+rows.map(function(r){return r.join(";");}).join("\n")], {type:"text/csv;charset=utf-8"});
   var a = document.createElement("a");
@@ -406,6 +630,8 @@ loadJSON("communes-paca.geojson").then(function(gj){
   document.getElementById("c-non").textContent = communes.filter(function(c){return c.p.z===0;}).length;
   document.getElementById("loader").classList.add("done");
   render(); fitToDepts();
+  chargerQPV();
+  chargerContoursQPV();
   chargerArrondissements()
     .catch(function(){ /* couche de repère facultative */ })
     .then(chargerCPTS);   // après les communes : le rattachement a besoin de byCode
@@ -440,10 +666,101 @@ loadJSON("communes-paca.geojson").then(function(gj){
     document.getElementById("c-zb").textContent = "indispo.";
     var cn = document.querySelector("#cross + .note");
     if (cn) cn.innerHTML = '<span class="warn">Croisement indisponible : la couche zones blanches ' +
-      'n\'a pas pu être chargée (<code>data/zones-blanches-4g.geojson</code>).</span>';
+      'n\'a pas pu être chargée (<code>zones-blanches-4g.geojson</code>).</span>';
   }
   document.getElementById("loader").classList.add("done");
 });
+
+/* Zonage QPV. Fichier distinct du geojson communal : l'arrêté est révisé à son
+   propre rythme, on le remplace seul sans régénérer les 947 contours. Il fait
+   autorité sur le champ `q` embarqué dans communes-paca.geojson, qui peut
+   dater d'un millésime antérieur — d'où la remise à zéro préalable. */
+function chargerQPV(){ return loadJSON("qpv-zonage.json").then(function(j){
+  qpvMeta = j;
+  communes.forEach(function(c){ c.p.q = 0; c.p.qzac = 0; c.p.qpv = null; });
+  var orphelins = [];
+  Object.keys(j.communes || {}).forEach(function(code){
+    var rec = byCode[code];
+    if (!rec){ orphelins.push(code); return; }
+    var e = j.communes[code];
+    rec.p.q    = e.zip || 0;
+    rec.p.qzac = e.zac || 0;
+    rec.p.qpv  = e.qpv || [];
+  });
+  qpvLoaded = true;
+  var nc = Object.keys(j.communes || {}).length - orphelins.length;
+  document.getElementById("qpv-note").innerHTML =
+    esc(j.n_qpv + " QPV : " + j.n_zip + " en ZIP, " + j.n_zac + " en ZAC, répartis sur " +
+        nc + " communes — zonage " + j.millesime + ".") +
+    (orphelins.length ? '<br><span class="warn">' + orphelins.length +
+      ' code(s) INSEE de l\'arrêté sans contour communal (voir la console).</span>' : "");
+  if (orphelins.length)
+    console.warn("QPV sans contour communal :", orphelins.join(", "));
+  render();
+}).catch(function(err){
+  console.warn("Zonage QPV indisponible :", err.message);
+  document.getElementById("w-qzip").classList.add("off");
+  document.getElementById("w-qzac").classList.add("off");
+  document.getElementById("qpv-note").innerHTML =
+    '<span class="warn">Zonage QPV non chargé (<code>qpv-zonage.json</code>). ' +
+    'Régénérez-le avec <code>build_qpv.py</code> : les compteurs QPV restent vides, ' +
+    'le reste de la carte fonctionne. Les contours des quartiers viennent d\'un ' +
+    'second fichier, <code>qpv-paca.geojson</code>.</span>';
+}); }
+
+/* Contours des quartiers prioritaires (ANCT 2024, filtrés PACA et simplifiés
+   par build_qpv_contours.py). Séparés du zonage : le premier fichier dit OÙ
+   sont les quartiers, le second COMMENT ils sont classés. Les deux se
+   remplacent indépendamment. */
+function chargerContoursQPV(){ return loadJSON("qpv-paca.geojson").then(function(gj){
+  L.geoJSON(gj, {
+    renderer: svgRenderer,
+    style: function(f){ return styleQPV(f.properties); },
+    onEachFeature: function(f, layer){
+      var p = f.properties;
+      qpvLayers.push({p:p, layer:layer});
+      layer.bindPopup(popupQPV(p), {maxWidth:300});
+      layer.on("mouseover", function(){
+        layer.setStyle({weight:3});
+        layer.bringToFront();
+        var coul = p.z === "ZIP" ? css("--zip") : css("--zac");
+        hb.innerHTML = "<b>" + esc(p.n) + "</b> " +
+          "<span style='color:var(--ink-3)'>QPV " + esc(p.q) + "</span>" +
+          '<span class="tag" style="background:' + coul + '">' + p.z + '</span>';
+        hb.classList.add("on");
+      });
+      layer.on("mouseout", function(){
+        layer.setStyle(styleQPV(p));
+        hb.classList.remove("on");
+      });
+    }
+  });
+  contoursLoaded = true;
+  document.getElementById("c-qpv").textContent = qpvLayers.length;
+  render();
+}).catch(function(err){
+  console.warn("Contours QPV indisponibles :", err.message);
+  var w = document.getElementById("w-qpv");
+  w.classList.add("off");
+  w.querySelector("input").disabled = true;
+  w.querySelector("input").checked = false;
+  state.qpv = false;
+  document.getElementById("c-qpv").textContent = "à importer";
+}); }
+
+function popupQPV(p){
+  var coul = p.z === "ZIP" ? css("--zip") : css("--zac");
+  var noms = (p.com || []).map(function(c){
+    return byCode[c] ? byCode[c].p.n : c;
+  });
+  var h = '<h3>' + esc(p.n) + '</h3><div class="code">' + esc(p.q) + '</div><dl>';
+  h += '<dt>Zonage</dt><dd>' + pill(coul, p.z) +
+       (p.z === "ZIP" ? " zone d'intervention prioritaire"
+                      : " zone d'action complémentaire") + '</dd>';
+  h += '<dt>Commune' + (noms.length > 1 ? "s" : "") + '</dt><dd>' +
+       esc(noms.join(", ")) + '</dd>';
+  return h + '</dl>';
+}
 
 var arrLayers = [], cptsParArr = {};
 
@@ -472,10 +789,30 @@ function chargerArrondissements(){ return loadJSON("arrondissements-marseille.ge
 function chargerCPTS(){ return loadJSON("cpts.geojson").then(function(gj){
   L.geoJSON(gj, {
     renderer: svgRenderer,
-    style: styleCPTS,
+    // styleCPTS reçoit la feature quand on la passe directement à L.geoJSON :
+    // l'objet est truthy et toutes les CPTS naîtraient en style « mise en
+    // avant ». On force donc l'argument.
+    style: function(){ return styleCPTS(false); },
     onEachFeature: function(f, layer){
       var p = f.properties || {};
-      cptsLayers.push({layer:layer});
+      // Index nécessaires au menu : périmètre communal (pour la restriction)
+      // et département dominant (pour le regroupement des options).
+      var codes = {}, comptes = {};
+      (p.communes || []).forEach(function(c){
+        codes[c] = 1;
+        var d = String(c).slice(0, 2);
+        comptes[d] = (comptes[d] || 0) + 1;
+      });
+      (p.arrondissements || []).forEach(function(a){
+        var d = String(a).slice(0, 2);
+        comptes[d] = (comptes[d] || 0) + 1;
+      });
+      var deps = Object.keys(comptes).sort(function(a, b){
+        return comptes[b] - comptes[a] || a.localeCompare(b);
+      });
+      var dominant = deps[0] || "--";
+      cptsLayers.push({layer:layer, p:p, codes:codes,
+                       deps:deps.slice().sort(), dep:dominant});
       // Une commune peut relever de plusieurs CPTS (Marseille : 8, Nice : 3,
       // Toulon : 2). On accumule au lieu d'écraser.
       (p.arrondissements||[]).forEach(function(a){
@@ -516,18 +853,21 @@ function chargerCPTS(){ return loadJSON("cpts.geojson").then(function(gj){
   gj.features.forEach(function(f){ (f.properties.communes||[]).forEach(function(c){ couvertes[c]=1; }); });
   var nc = Object.keys(couvertes).length, sans = communes.length - nc;
   document.getElementById("c-cpts").textContent = cptsLayers.length;
-  document.getElementById("l-cpts").checked = true; state.cpts = true;
+  // Défaut « toutes » : identique à l'ancien comportement, où la couche
+  // s'allumait dès que le fichier était disponible.
+  state.cpts = "*";
+  remplirMenuCPTS();
   document.getElementById("cpts-note").textContent =
     nc + " communes rattachées à une CPTS" + (sans ? ", " + sans + " sans." : ".");
   render();
 }).catch(function(){
-  var w = document.getElementById("w-cpts");
-  w.classList.add("off");
-  w.querySelector("input").disabled = true;
+  cptsSelect.innerHTML = '<option value="">Couche indisponible</option>';
+  cptsSelect.disabled = true;
+  state.cpts = "";
   document.getElementById("c-cpts").textContent = "à importer";
   document.getElementById("cpts-note").innerHTML =
-    '<span class="warn">Couche câblée mais sans données. Déposez <code>data/cpts.geojson</code> ' +
-    '(procédure dans le README) : la couche s\'active sans toucher au code.</span>';
+    '<span class="warn">Couche câblée mais sans données. Déposez <code>cpts.geojson</code> ' +
+    '(procédure dans le README) : le menu se remplit sans toucher au code.</span>';
 }); }
 })();
 </script>

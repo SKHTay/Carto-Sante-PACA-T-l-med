@@ -9,6 +9,7 @@ DONNÉES
   cpts.geojson                      70 CPTS — 902 communes rattachées sur 947 (ARS PACA, 01/2026)
   arrondissements-marseille.geojson 16 arrondissements municipaux (13201-13216), maille des CPTS marseillaises
   qpv-zonage.json                   135 QPV — 67 en ZIP, 68 en ZAC, sur 53 communes (arrêté ARS PACA, zonage 2025)
+  qpv-paca.geojson                  contours des 135 QPV de PACA (ANCT 2024), portant le zonage ZIP/ZAC
 
 La carte se charge même si un de ces fichiers manque : la couche concernée
 s'affiche alors désactivée, avec la marche à suivre.
@@ -18,6 +19,7 @@ SCRIPTS DE (RE)GÉNÉRATION
   build_cpts_from_xlsx.py           cpts.geojson, depuis le listing Excel de l'ARS
   build_arrondissements_marseille.py arrondissements-marseille.geojson
   build_qpv.py                      qpv-zonage.json, depuis l'arrêté de zonage QPV
+  build_qpv_contours.py             qpv-paca.geojson, depuis l'export national ANCT
   convert_cpts.py, export_gpkg_paca.py  utilitaires amont
 
 ------------------------------------------------------------------------
@@ -49,3 +51,30 @@ Cannet, Ariane sur trois communes niçoises, Les Moulins entre Nice et
 Saint-Laurent-du-Var, Les Escourtines entre Marseille et La Penne-sur-Huveaune).
 Ils sont rattachés à chacune d'elles ; les compteurs du panneau dédoublonnent
 sur l'identifiant du QPV pour ne pas les compter deux fois.
+
+------------------------------------------------------------------------
+qpv-paca.geojson
+
+Contours des quartiers, là où qpv-zonage.json ne porte que leur classement.
+Les deux se complètent : le premier dit OÙ sont les quartiers, le second
+COMMENT ils sont classés. Ils se remplacent indépendamment — la géographie des
+QPV bouge tous les six ans, le zonage médical bien plus souvent.
+
+Source : export national des quartiers prioritaires 2024 (ANCT, data.gouv.fr),
+version WGS84. Prendre le fichier WGS84 et non le LB93 évite une reprojection :
+Leaflet attend des longitudes et latitudes.
+
+  python3 build_qpv_contours.py \
+      QP2024_France_Hexagonale_Outre_Mer_WGS84.geojson \
+      qpv-zonage.json qpv-paca.geojson
+
+Le script filtre la région 93 (135 des 1 584 entités nationales), simplifie les
+contours en Douglas-Peucker à 1,5e-5 degré (~1,7 m) et arrondit à 5 décimales :
+243 ko en sortie, 31 % des sommets retirés sans perte de forme visible.
+
+Il s'arrête si les deux jeux ne se recouvrent pas exactement. Un QPV sans
+zonage s'afficherait en gris muet, un zonage sans contour disparaîtrait de la
+carte : dans les deux cas mieux vaut échouer que publier.
+
+Le zonage ZIP/ZAC ne figure pas dans l'export ANCT ; il est injecté depuis
+l'arrêté au moment de la construction, ce qui évite une jointure côté client.
